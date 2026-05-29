@@ -545,7 +545,7 @@ export default function KycWalletHub() {
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
             <CloudExchangeLogo size={32} />
             <span style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", letterSpacing: -0.5 }}>
-              Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
+              Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span>
             </span>
           </Link>
 

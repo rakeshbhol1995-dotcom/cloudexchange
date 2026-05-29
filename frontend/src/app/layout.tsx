@@ -8,8 +8,56 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "CloudExchange — Institutional Digital Asset Exchange",
-  description: "Next-generation institutional-grade digital asset exchange with microsecond order matching engine.",
+  title: "CloudExchange.in | India's Premium Institutional Crypto Exchange",
+  description: "CloudExchange.in is a next-generation high-frequency digital asset exchange featuring a sub-millisecond matching engine, secure P2P UPI/IMPS escrow, dynamic selfie KYC, and verified cryptographic double-entry ledger audits.",
+  keywords: [
+    "CloudExchange",
+    "cloudexchange.in",
+    "cloud exchange",
+    "crypto exchange India",
+    "secure bitcoin P2P escrow",
+    "high-speed crypto matching engine",
+    "UPI IMPS crypto escrow",
+    "liveness selfie KYC exchange",
+    "proof of reserves",
+    "double entry audit ledger"
+  ],
+  alternates: {
+    canonical: "https://cloudexchange.in",
+  },
+  openGraph: {
+    title: "CloudExchange.in | India's Premium Institutional Crypto Exchange",
+    description: "Experience India's highest-speed cryptocurrency trading platform. Sub-1ms ingestion latency, secure P2P UPI escrow, and double-entry ledger audits.",
+    url: "https://cloudexchange.in",
+    siteName: "CloudExchange India",
+    images: [
+      {
+        url: "https://cloudexchange.in/icon.png",
+        width: 512,
+        height: 512,
+        alt: "CloudExchange - Institutional Digital Asset Trading Terminal"
+      }
+    ],
+    locale: "en_IN",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CloudExchange.in | India's Premium Institutional Crypto Exchange",
+    description: "Sub-millisecond high-performance order matching and sharded audit ledger guarantee on CloudExchange.in.",
+    images: ["https://cloudexchange.in/icon.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
 };
 
 export const viewport: Viewport = {
@@ -31,7 +79,39 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${outfit.variable} dark h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-[#05050a] text-slate-200 font-sans">{children}</body>
+      <body className="min-h-full flex flex-col bg-[#05050a] text-slate-200 font-sans">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              "name": "CloudExchange.in",
+              "url": "https://cloudexchange.in",
+              "potentialAction": {
+                "@type": "SearchAction",
+                "target": "https://cloudexchange.in/coins?q={search_term_string}",
+                "query-input": "required name=search_term_string"
+              }
+            })
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FinancialProduct",
+              "name": "CloudExchange.in",
+              "url": "https://cloudexchange.in",
+              "logo": "https://cloudexchange.in/icon.png",
+              "description": "India's premier high-frequency digital asset terminal. Featuring sub-1ms ingestion latency, peer-to-peer escrow, and dual-entry ledger verification.",
+              "category": "Cryptocurrency Exchange Service"
+            })
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

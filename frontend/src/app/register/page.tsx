@@ -67,7 +67,7 @@ function RegisterForm() {
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
           <CloudExchangeLogo size={28} />
           <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>
-            Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
+            Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span>
           </span>
         </Link>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>

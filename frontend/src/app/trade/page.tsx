@@ -1021,7 +1021,7 @@ export default function TradePage() {
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
           <CloudExchangeLogo size={24} />
           <span style={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)" }}>
-            Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
+            Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span>
           </span>
         </Link>
         <div style={{ width: 1, height: 24, background: "var(--border)" }} />

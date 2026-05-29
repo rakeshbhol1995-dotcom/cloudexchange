@@ -85,7 +85,7 @@ export default function HomePage() {
               WebkitTextFillColor: "transparent",
               letterSpacing: -0.5
             }}>
-              Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
+              Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span>
             </span>
           </Link>
 
@@ -174,7 +174,7 @@ export default function HomePage() {
             </h1>
             
             <p style={{ fontSize: 15, color: "var(--text-secondary)", marginBottom: 36, lineHeight: 1.7, maxWidth: 520 }}>
-              CloudExchange delivers institutional-grade order matching, real-time double-entry settlement verification, secure P2P escrow with anti-fraud metadata checks, and cryptographic passkey authentication.
+              CloudExchange.in delivers institutional-grade order matching, real-time double-entry settlement verification, secure P2P escrow with anti-fraud metadata checks, and cryptographic passkey authentication.
             </p>
 
             {/* Functional register input redirection */}
@@ -531,7 +531,7 @@ export default function HomePage() {
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
                 <CloudExchangeLogo size={24} />
                 <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>
-                  Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
+                  Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span>
                 </span>
               </div>
               <p style={{ lineHeight: 1.8, marginBottom: 24 }}>
