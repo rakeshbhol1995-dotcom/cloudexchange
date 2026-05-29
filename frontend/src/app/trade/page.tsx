@@ -211,6 +211,7 @@ function generateBook(center: number): { bids: OrderLevel[]; asks: OrderLevel[] 
 
 export default function TradePage() {
   const [activePair, setActivePair] = useState(PAIRS[0]);
+  const [tradingPairs, setTradingPairs] = useState(PAIRS);
   const [price, setPrice] = useState(65050);
   const [bids, setBids] = useState<OrderLevel[]>([]);
   const [asks, setAsks] = useState<OrderLevel[]>([]);
@@ -261,7 +262,7 @@ export default function TradePage() {
   const [candleWidth, setCandleWidth] = useState<number>(8); // zoom level
   const [scrollOffset, setScrollOffset] = useState<number>(0); // pan offset
 
-  // Sync login status, wallet balance, and API keys
+  // Sync login status, wallet balance, API keys, and custom trading pairs
   useEffect(() => {
     const logged = localStorage.getItem("user_logged_in");
     const storedEmail = localStorage.getItem("username");
@@ -280,6 +281,24 @@ export default function TradePage() {
     const storedKeys = localStorage.getItem("api_credentials");
     if (storedKeys) {
       setApiKeys(JSON.parse(storedKeys));
+    }
+
+    const savedCustomPairs = localStorage.getItem("admin_custom_trading_pairs");
+    if (savedCustomPairs) {
+      const parsed: any[] = JSON.parse(savedCustomPairs);
+      const combined = [...PAIRS];
+      parsed.forEach(p => {
+        const pairSymbol = `${p.symbol}/USDT`;
+        if (!combined.some(c => c.symbol === pairSymbol)) {
+          combined.push({
+            symbol: pairSymbol,
+            price: p.price,
+            change: p.change24h,
+            vol: p.volume24h >= 1000 ? `${(p.volume24h / 1000).toFixed(1)}K` : `${p.volume24h}`
+          });
+        }
+      });
+      setTradingPairs(combined);
     }
 
     // Set default order price when active pair changes
@@ -976,7 +995,7 @@ export default function TradePage() {
     setRevealSecrets(prev => ({ ...prev, [keyVal]: !prev[keyVal] }));
   };
 
-  const filteredPairs = PAIRS.filter(p => {
+  const filteredPairs = tradingPairs.filter(p => {
     const base = p.symbol.split("/")[0];
     const matchesSearch = p.symbol.toLowerCase().includes(pairSearch.toLowerCase());
     if (!matchesSearch) return false;

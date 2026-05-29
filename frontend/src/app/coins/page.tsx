@@ -105,6 +105,7 @@ export default function CoinsPage() {
   const [kycStatus, setKycStatus] = useState("Tier-1 Basic (Email Verified)");
   const [assetSearch, setAssetSearch] = useState("");
   const [assets, setAssets] = useState<AssetBalance[]>([]);
+  const [coinDirectory, setCoinDirectory] = useState<CoinDirectoryItem[]>(COIN_DIRECTORY_LIST);
 
   // Modal states: "deposit" | "withdraw" | "none"
   const [modalType, setModalType] = useState<"deposit" | "withdraw" | "none">("none");
@@ -123,7 +124,7 @@ export default function CoinsPage() {
   const [toastMessage, setToastMessage] = useState("");
   const [toastType, setToastType] = useState<"success" | "error">("success");
 
-  // Sync balances
+  // Sync balances and custom pairs
   useEffect(() => {
     const logged = localStorage.getItem("user_logged_in");
     const storedEmail = localStorage.getItem("username");
@@ -149,12 +150,28 @@ export default function CoinsPage() {
       setAssets(defaultBalances);
       localStorage.setItem("user_asset_balances", JSON.stringify(defaultBalances));
     }
+
+    // Load custom pairs
+    const savedCustomPairs = localStorage.getItem("admin_custom_trading_pairs");
+    if (savedCustomPairs) {
+      const parsed: CoinDirectoryItem[] = JSON.parse(savedCustomPairs);
+      const combined = [...COIN_DIRECTORY_LIST];
+      parsed.forEach(p => {
+        if (!combined.some(c => c.symbol === p.symbol)) {
+          combined.push(p);
+        }
+      });
+      setCoinDirectory(combined);
+    }
   }, []);
 
-  // Update total USD wallet value based on asset balances and mock prices
+  // Update total USD wallet value based on asset balances and dynamic prices
   const coinPriceMap: Record<string, number> = {
     USDT: 1.00, BTC: 65050.00, ETH: 3450.00, SOL: 145.00, BNB: 580.00
   };
+  coinDirectory.forEach(c => {
+    coinPriceMap[c.symbol] = c.price;
+  });
 
   // Generate simulated addresses
   useEffect(() => {
@@ -279,7 +296,7 @@ export default function CoinsPage() {
     triggerToast(`Withdrawal of ${amt} ${activeModalCoin} completed.`);
   };
 
-  const filteredCoins = COIN_DIRECTORY_LIST.filter(c => 
+  const filteredCoins = coinDirectory.filter(c => 
     c.symbol.toLowerCase().includes(assetSearch.toLowerCase()) || 
     c.name.toLowerCase().includes(assetSearch.toLowerCase())
   );
