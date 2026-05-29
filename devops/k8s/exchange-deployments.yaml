@@ -1,0 +1,184 @@
+# Kubernetes Deployment & Services Manifests
+# Phase 6 — Kubernetes + Terraform + DevOps
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: matching-engine-wal-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi # Pre-allocated disk space for memory-mapped WAL files
+  storageClassName: premium-ssd-sc # Provisioned on low-latency SSD storage class
+
+---
+# 1. Rust HFT Matching Engine Service & Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: matching-engine-deployment
+  labels:
+    app: matching-engine
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: matching-engine
+  template:
+    metadata:
+      labels:
+        app: matching-engine
+    spec:
+      containers:
+        - name: matching-engine
+          image: cloudexchange/matching-engine:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: "4000m" # Requests 4 dedicated cores for thread pinning
+              memory: "8Gi"
+            limits:
+              cpu: "6000m"
+              memory: "12Gi"
+          env:
+            - name: RUST_LOG
+              value: "info"
+            - name: WAL_FILE_PATH
+              value: "/var/log/exchange/wal.log"
+          volumeMounts:
+            - name: wal-storage
+              mountPath: "/var/log/exchange"
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: wal-storage
+          persistentVolumeClaim:
+            claimName: matching-engine-wal-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: matching-engine-service
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector:
+    app: matching-engine
+
+---
+# 2. Double-Entry Ledger & Settlement Engine Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger-settlement-deployment
+  labels:
+    app: ledger-settlement
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ledger-settlement
+  template:
+    metadata:
+      labels:
+        app: ledger-settlement
+    spec:
+      containers:
+        - name: ledger-settlement
+          image: cloudexchange/ledger-settlement:latest
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          env:
+            - name: DATABASE_URL
+              value: "postgres://admin_exchange:HardenedVaultPassword999!@cloudexchange-ledger-coordinator:5432/cloudexchange_ledger"
+            - name: KAFKA_BROKERS
+              value: "msk-broker-0:9092,msk-broker-1:9092,msk-broker-2:9092"
+          ports:
+            - containerPort: 9000
+          readinessProbe:
+            httpGet:
+              path: "/health"
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ledger-settlement-service
+spec:
+  ports:
+    - port: 9000
+      targetPort: 9000
+  selector:
+    app: ledger-settlement
+
+---
+# 3. Next.js Ultra-Premium Trading Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+  labels:
+    app: frontend
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: cloudexchange/frontend-trading:latest
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: "/"
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 3000
+  selector:
+    app: frontend
