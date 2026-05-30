@@ -1567,9 +1567,437 @@ body {
 
 
 
+/* ============================================================
+   HOMEPAGE — NAV / HERO / LAYOUT RESPONSIVE
+   ============================================================ */
 
+/* Desktop nav visible, hamburger hidden */
+.home-nav-desktop {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+.home-nav-desktop .hdr-link {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.home-nav-desktop .hdr-link:hover {
+  color: var(--yellow);
+  background: rgba(245, 166, 35, 0.08);
+}
+.home-auth-desktop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.home-hamburger {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  flex-shrink: 0;
+}
+.home-hamburger:hover {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
 
+/* Mobile drawer */
+.home-mobile-drawer {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 64px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(4, 8, 20, 0.98);
+  backdrop-filter: blur(20px);
+  z-index: 99;
+  padding: 24px;
+  gap: 8px;
+  overflow-y: auto;
+}
+.home-mobile-drawer a,
+.home-mobile-drawer button {
+  display: block;
+  padding: 14px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+  border-radius: 10px;
+  border: none;
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.home-mobile-drawer a:hover,
+.home-mobile-drawer button:hover {
+  background: rgba(245,166,35,0.1);
+  color: var(--yellow);
+}
 
+/* HERO FLEX — Desktop side by side */
+.hero-flex {
+  display: flex;
+  align-items: center;
+  gap: 48px;
+}
+.hero-h1 {
+  font-size: 48px;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+}
+.hero-market-card {
+  width: 420px;
+  flex-shrink: 0;
+  background: rgba(10, 17, 40, 0.65);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+
+/* Trust badges */
+.trust-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Features grid — 3 col desktop */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+/* Reserves section */
+.reserves-flex {
+  display: flex;
+  align-items: center;
+  gap: 60px;
+}
+.reserves-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 8px;
+}
+
+/* Footer grid */
+.footer-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 48px;
+  margin-bottom: 40px;
+}
+.footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---- HOMEPAGE MOBILE BREAKPOINTS ---- */
+@media (max-width: 768px) {
+  .home-nav-desktop { display: none !important; }
+  .home-auth-desktop { display: none !important; }
+  .home-hamburger { display: flex !important; }
+
+  .hero-flex {
+    flex-direction: column !important;
+    gap: 32px !important;
+    text-align: center !important;
+  }
+  .hero-h1 {
+    font-size: 28px !important;
+    letter-spacing: -0.01em !important;
+  }
+  .hero-market-card {
+    width: 100% !important;
+  }
+
+  .trust-badge {
+    font-size: 10px !important;
+    padding: 4px 8px !important;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .reserves-flex {
+    flex-direction: column !important;
+    gap: 32px !important;
+  }
+  .reserves-stats {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 16px !important;
+  }
+
+  .footer-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 32px !important;
+  }
+  .footer-bottom {
+    flex-direction: column !important;
+    gap: 12px !important;
+    text-align: center !important;
+  }
+
+  /* CTA button group */
+  section > .container-xl > div[style*="display: flex"][style*="gap: 12"] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  /* Page margin fix on mobile */
+  main[style*="margin: 40px auto"] {
+    margin: 20px auto !important;
+  }
+
+  /* Alert float — mobile width */
+  .alert-float {
+    left: 12px !important;
+    right: 12px !important;
+    transform: none !important;
+    width: calc(100% - 24px) !important;
+    max-width: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-h1 {
+    font-size: 22px !important;
+  }
+  .footer-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ============================================================
+   SECURITY / EARN / BOTS / COPY-TRADE — Grid Fallbacks in CSS
+   (Backup for JSX-scoped styles, ensures SSR/hydration safety)
+   ============================================================ */
+.grid-responsive-security,
+.grid-responsive-earn,
+.grid-responsive-affiliate,
+.grid-responsive-bots {
+  display: grid;
+  gap: 32px;
+}
+.grid-responsive-security { grid-template-columns: 1fr 1fr; }
+.grid-responsive-earn { grid-template-columns: 1fr 1fr; }
+.grid-responsive-affiliate { grid-template-columns: 1fr 1fr; }
+.grid-responsive-bots { grid-template-columns: 1fr 340px; }
+
+@media (max-width: 900px) {
+  .grid-responsive-security,
+  .grid-responsive-earn,
+  .grid-responsive-affiliate {
+    grid-template-columns: 1fr !important;
+  }
+}
+@media (max-width: 900px) {
+  .grid-responsive-bots {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ============================================================
+   SECURITY PAGE — 2FA toggle items mobile wrap
+   ============================================================ */
+@media (max-width: 480px) {
+  .grid-responsive-security > div > div[style*="justify-content: space-between"],
+  .grid-responsive-security div[style*="display: flex"][style*="justifyContent: space-between"][style*="align-items: center"] {
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+  }
+}
+
+/* ============================================================
+   AFFILIATE & COPY-TRADE — Referral/position table mobile card
+   ============================================================ */
+@media (max-width: 640px) {
+  .affiliate-table-wrap,
+  .copy-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .affiliate-table-wrap table,
+  .copy-table-wrap table {
+    min-width: 520px;
+  }
+}
+
+/* ============================================================
+   LIST-TOKEN PAGE — QR + address payment layout mobile
+   ============================================================ */
+.list-token-payment-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 24px;
+  align-items: center;
+}
+@media (max-width: 600px) {
+  .list-token-payment-row {
+    grid-template-columns: 1fr !important;
+    text-align: center !important;
+  }
+  .list-token-payment-row > div:first-child {
+    display: flex;
+    justify-content: center;
+  }
+}
+
+/* List-token bottom action bar */
+@media (max-width: 600px) {
+  .list-token-bottom-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .list-token-bottom-bar button {
+    width: 100% !important;
+  }
+}
+
+/* ============================================================
+   KYC PAGE — Stats grid (Total Balance + Security Tier + Actions)
+   ============================================================ */
+.kyc-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 24px;
+  align-items: center;
+}
+@media (max-width: 900px) {
+  .kyc-stats-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+@media (max-width: 600px) {
+  .kyc-stats-grid {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
+}
+
+/* ============================================================
+   LEDGER PAGE — balance chart header flex
+   ============================================================ */
+@media (max-width: 640px) {
+  .ledger-header-flex {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+}
+
+/* ============================================================
+   P2P PAGE — Offer tab, amount input strip
+   ============================================================ */
+@media (max-width: 480px) {
+  .p2p-amount-strip {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .p2p-amount-strip input {
+    width: 100% !important;
+  }
+}
+
+/* ============================================================
+   MOBILE PADDING — global container adjustment
+   ============================================================ */
+@media (max-width: 480px) {
+  .container-xl {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  .bn-card {
+    padding: 20px !important;
+  }
+}
+
+/* ============================================================
+   BOTS PAGE — Terminal panel height on mobile
+   ============================================================ */
+@media (max-width: 900px) {
+  .grid-responsive-bots > div:last-child > div:first-child {
+    height: 300px !important;
+  }
+}
+
+/* ============================================================
+   TOAST / NOTIFICATION — Full width on mobile
+   ============================================================ */
+@media (max-width: 480px) {
+  div[style*="position: fixed"][style*="bottom: 24"][style*="right: 24"] {
+    right: 12px !important;
+    bottom: 16px !important;
+    left: 12px !important;
+    width: calc(100% - 24px) !important;
+    font-size: 12px !important;
+  }
+}
+
+/* ============================================================
+   COINS PAGE — Market table horizontal scroll
+   ============================================================ */
+@media (max-width: 768px) {
+  .coins-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .coins-table-wrap table {
+    min-width: 640px;
+  }
+}
+
+/* ============================================================
+   HOMEPAGE — Hero email register input
+   ============================================================ */
+@media (max-width: 480px) {
+  .hero-flex > div:first-child > div[style*="display: flex"][style*="gap: 8"] {
+    flex-direction: column !important;
+  }
+  .hero-flex > div:first-child > div[style*="display: flex"][style*="gap: 8"] input {
+    width: 100% !important;
+  }
+  .hero-flex > div:first-child > div[style*="display: flex"][style*="gap: 8"] a {
+    width: 100% !important;
+    text-align: center !important;
+    justify-content: center !important;
+  }
+}
 
 
 
