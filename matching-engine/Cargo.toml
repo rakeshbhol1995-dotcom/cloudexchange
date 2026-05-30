@@ -1,0 +1,17 @@
+[package]
+name = "matching-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+core_affinity = "0.8"
+memmap2 = "0.9"
+seahash = "4.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+crossbeam-channel = "0.5"
+crossbeam-utils = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+rand = "0.8"
+socket2 = "0.5"

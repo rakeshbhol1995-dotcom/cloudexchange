@@ -8,11 +8,11 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "CloudExchange.in | India's Premium Institutional Crypto Exchange",
-  description: "CloudExchange.in is a next-generation high-frequency digital asset exchange featuring a sub-millisecond matching engine, secure P2P UPI/IMPS escrow, dynamic selfie KYC, and verified cryptographic double-entry ledger audits.",
+  title: "CloudExchange | India's Premium Institutional Crypto Exchange",
+  description: "CloudExchange is a next-generation high-frequency digital asset exchange featuring a sub-millisecond matching engine, secure P2P UPI/IMPS escrow, dynamic selfie KYC, and verified cryptographic double-entry ledger audits.",
   keywords: [
     "CloudExchange",
-    "cloudexchange.in",
+    "cloudexchange",
     "cloud exchange",
     "crypto exchange India",
     "secure bitcoin P2P escrow",
@@ -23,16 +23,16 @@ export const metadata: Metadata = {
     "double entry audit ledger"
   ],
   alternates: {
-    canonical: "https://cloudexchange.in",
+    canonical: "https://cloudexchange.com",
   },
   openGraph: {
-    title: "CloudExchange.in | India's Premium Institutional Crypto Exchange",
+    title: "CloudExchange | India's Premium Institutional Crypto Exchange",
     description: "Experience India's highest-speed cryptocurrency trading platform. Sub-1ms ingestion latency, secure P2P UPI escrow, and double-entry ledger audits.",
-    url: "https://cloudexchange.in",
+    url: "https://cloudexchange.com",
     siteName: "CloudExchange India",
     images: [
       {
-        url: "https://cloudexchange.in/icon.png",
+        url: "https://cloudexchange.com/icon.png",
         width: 512,
         height: 512,
         alt: "CloudExchange - Institutional Digital Asset Trading Terminal"
@@ -43,9 +43,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "CloudExchange.in | India's Premium Institutional Crypto Exchange",
-    description: "Sub-millisecond high-performance order matching and sharded audit ledger guarantee on CloudExchange.in.",
-    images: ["https://cloudexchange.in/icon.png"],
+    title: "CloudExchange | India's Premium Institutional Crypto Exchange",
+    description: "Sub-millisecond high-performance order matching and sharded audit ledger guarantee on CloudExchange.",
+    images: ["https://cloudexchange.com/icon.png"],
   },
   robots: {
     index: true,
@@ -68,6 +68,8 @@ export const viewport: Viewport = {
   themeColor: "#040814",
 };
 
+import Web3Provider from "@/components/providers/Web3Provider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -86,11 +88,11 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebSite",
-              "name": "CloudExchange.in",
-              "url": "https://cloudexchange.in",
+              "name": "CloudExchange",
+              "url": "https://cloudexchange.com",
               "potentialAction": {
                 "@type": "SearchAction",
-                "target": "https://cloudexchange.in/coins?q={search_term_string}",
+                "target": "https://cloudexchange.com/coins?q={search_term_string}",
                 "query-input": "required name=search_term_string"
               }
             })
@@ -102,15 +104,17 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "FinancialProduct",
-              "name": "CloudExchange.in",
-              "url": "https://cloudexchange.in",
-              "logo": "https://cloudexchange.in/icon.png",
+              "name": "CloudExchange",
+              "url": "https://cloudexchange.com",
+              "logo": "https://cloudexchange.com/icon.png",
               "description": "India's premier high-frequency digital asset terminal. Featuring sub-1ms ingestion latency, peer-to-peer escrow, and dual-entry ledger verification.",
               "category": "Cryptocurrency Exchange Service"
             })
           }}
         />
-        {children}
+        <Web3Provider>
+          {children}
+        </Web3Provider>
       </body>
     </html>
   );

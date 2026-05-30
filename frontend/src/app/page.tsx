@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { Activity, TrendingUp, ShieldCheck, Cpu, ArrowRight, LogOut, CheckCircle, Smartphone, HelpCircle } from "lucide-react";
+import { Activity, ShieldCheck, Cpu, ArrowRight, LogOut, CheckCircle, Smartphone, HelpCircle, Menu, X } from "lucide-react";
 import CloudExchangeLogo from "./components/CloudExchangeLogo";
 import SpaceBackground from "./components/SpaceBackground";
 
@@ -24,10 +24,11 @@ const FAQS = [
 
 export default function HomePage() {
   const [email, setEmail] = useState("");
-  const [btcPrice, setBtcPrice] = useState(65050);
+  const [marketsList, setMarketsList] = useState(MARKETS);
   const [faqOpen, setFaqOpen] = useState<number | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState("");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Sync login status on mount
   useEffect(() => {
@@ -46,10 +47,43 @@ export default function HomePage() {
     setUserEmail("");
   };
 
+  // Fetch real-time prices from Binance with custom fallbacks
   useEffect(() => {
-    const iv = setInterval(() => {
-      setBtcPrice(p => Math.max(1000, +(p + (Math.random() - 0.48) * 15).toFixed(2)));
-    }, 800);
+    const fetchRealPrices = async () => {
+      try {
+        const symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "DOGEUSDT"];
+        const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`);
+        if (!res.ok) throw new Error("Binance API rate limit or error");
+        const data = await res.json();
+        
+        setMarketsList(prev => prev.map(m => {
+          const apiItem = data.find((item: any) => item.symbol === `${m.symbol}USDT`);
+          if (apiItem) {
+            return {
+              ...m,
+              price: parseFloat(apiItem.lastPrice),
+              change: parseFloat(apiItem.priceChangePercent),
+              vol: `$${(parseFloat(apiItem.quoteVolume) / 1e6).toFixed(1)}M`
+            };
+          }
+          return m;
+        }));
+      } catch (err) {
+        console.warn("Falling back to price simulation: ", err);
+        // Fallback: simple simulated price moves so UI always looks alive
+        setMarketsList(prev => prev.map(m => {
+          const delta = (Math.random() - 0.48) * (m.price * 0.001);
+          return {
+            ...m,
+            price: +(m.price + delta).toFixed(m.price < 2 ? 4 : 2),
+            change: +(m.change + (Math.random() - 0.5) * 0.05).toFixed(2)
+          };
+        }));
+      }
+    };
+
+    fetchRealPrices();
+    const iv = setInterval(fetchRealPrices, 4000);
     return () => clearInterval(iv);
   }, []);
 
@@ -64,59 +98,50 @@ export default function HomePage() {
         position: "sticky",
         top: 0,
         zIndex: 100,
-        background: "rgba(10, 17, 40, 0.75)",
-        backdropFilter: "blur(12px)",
+        background: "rgba(8, 14, 32, 0.92)",
+        backdropFilter: "blur(16px)",
         borderBottom: "1px solid var(--border)",
         height: 64,
         display: "flex",
         alignItems: "center",
         padding: "0 24px",
-        justifyContent: "space-between"
+        justifyContent: "space-between",
+        gap: 16
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
-          {/* Rebranded Premium CloudExchange Logo */}
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-            <CloudExchangeLogo size={32} />
-            <span style={{
-              fontSize: 20,
-              fontWeight: 800,
-              background: "linear-gradient(90deg, #FFFFFF 0%, #D1D5DB 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              letterSpacing: -0.5
-            }}>
-              Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span>
-            </span>
-          </Link>
+        {/* ── LOGO ── */}
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flexShrink: 0 }}>
+          <CloudExchangeLogo size={32} />
+          <span style={{
+            fontSize: 19,
+            fontWeight: 800,
+            color: "#fff",
+            letterSpacing: -0.5,
+            lineHeight: 1,
+            whiteSpace: "nowrap"
+          }}>
+            Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
+          </span>
+        </Link>
 
-          {/* Navigation Links */}
-          <nav style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <Link href="/coins" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>Coins</Link>
-            <Link href="/trade" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>Trade</Link>
-            <Link href="/p2p" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>P2P Fiat</Link>
-            <Link href="/kyc" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>KYC & Wallet</Link>
-            <Link href="/ledger" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>Ledger Audit</Link>
-          </nav>
-        </div>
+        {/* ── DESKTOP NAV (center) ── */}
+        <nav className="home-nav-desktop" style={{ flex: 1 }}>
+          <Link href="/coins" className="hdr-link">Coins</Link>
+          <Link href="/trade" className="hdr-link">Trade</Link>
+          <Link href="/p2p" className="hdr-link">P2P</Link>
+          <Link href="/kyc" className="hdr-link">KYC</Link>
+          <Link href="/ledger" className="hdr-link">Ledger</Link>
+        </nav>
 
-        {/* Right side controls */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* ── DESKTOP AUTH (right) ── */}
+        <div className="home-auth-desktop">
           {isLoggedIn ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green)" }} />
-                <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{userEmail}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(0,230,118,0.07)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: 8, padding: "5px 12px" }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)", flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: "var(--text-secondary)", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{userEmail}</span>
               </div>
-              <button onClick={handleLogout} className="btn-outline" style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "6px 14px",
-                fontSize: 12,
-                cursor: "pointer",
-                borderRadius: 6
-              }}>
-                <LogOut size={14} /> Log Out
+              <button onClick={handleLogout} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 14px", fontSize: 12, cursor: "pointer", borderRadius: 8, background: "transparent", border: "1px solid rgba(255,23,68,0.35)", color: "var(--red)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                <LogOut size={13} /> Log Out
               </button>
             </div>
           ) : (
@@ -125,32 +150,71 @@ export default function HomePage() {
                 color: "var(--text-primary)",
                 fontWeight: 600,
                 fontSize: 13,
-                padding: "8px 18px",
+                padding: "8px 20px",
                 borderRadius: 8,
                 textDecoration: "none",
-                border: "1px solid var(--border)"
+                border: "1px solid var(--border)",
+                background: "transparent",
+                whiteSpace: "nowrap",
+                transition: "border-color 0.2s"
               }}>Log In</Link>
               <Link href="/register" style={{
                 background: "var(--yellow)",
                 color: "#000",
                 fontWeight: 700,
                 fontSize: 13,
-                padding: "8px 18px",
+                padding: "8px 20px",
                 borderRadius: 8,
-                textDecoration: "none"
+                textDecoration: "none",
+                whiteSpace: "nowrap"
               }}>Sign Up</Link>
             </div>
           )}
         </div>
+
+        {/* ── MOBILE HAMBURGER ── */}
+        <button
+          onClick={() => setMobileNavOpen(o => !o)}
+          className="home-hamburger"
+          aria-label="Toggle menu"
+        >
+          {mobileNavOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
       </header>
+
+      {/* ── MOBILE NAV DRAWER ── */}
+      {mobileNavOpen && (
+        <div className="home-mobile-drawer">
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 4px 16px", borderBottom: "1px solid var(--border)", marginBottom: 8 }}>
+            <CloudExchangeLogo size={26} />
+            <span style={{ fontSize: 17, fontWeight: 800, color: "#fff" }}>Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span></span>
+          </div>
+          <Link href="/coins" onClick={() => setMobileNavOpen(false)}>🪙 Coins</Link>
+          <Link href="/trade" onClick={() => setMobileNavOpen(false)}>📊 Trade</Link>
+          <Link href="/p2p" onClick={() => setMobileNavOpen(false)}>🔄 P2P Escrow</Link>
+          <Link href="/kyc" onClick={() => setMobileNavOpen(false)}>🛡️ KYC &amp; Wallet</Link>
+          <Link href="/ledger" onClick={() => setMobileNavOpen(false)}>📋 Ledger Audit</Link>
+          <div style={{ height: 1, background: "var(--border)", margin: "8px 0" }} />
+          {isLoggedIn ? (
+            <button onClick={() => { handleLogout(); setMobileNavOpen(false); }} style={{ color: "var(--red)", border: "1px solid rgba(255,23,68,0.3)", background: "rgba(255,23,68,0.06)" }}>
+              🚪 Log Out
+            </button>
+          ) : (
+            <>
+              <Link href="/login" onClick={() => setMobileNavOpen(false)} style={{ border: "1px solid var(--border)", fontWeight: 700, textAlign: "center" }}>Log In</Link>
+              <Link href="/register" onClick={() => setMobileNavOpen(false)} style={{ background: "var(--yellow)", color: "#000", fontWeight: 800, border: "none", textAlign: "center" }}>⚡ Sign Up Free</Link>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ─── HERO SECTION ─── */}
       <section style={{
         background: "radial-gradient(ellipse at top, rgba(12, 26, 58, 0.4) 0%, rgba(4, 8, 20, 0.1) 70%)",
-        padding: "80px 0 72px",
+        padding: "72px 0 60px",
         borderBottom: "1px solid var(--border-light)"
       }}>
-        <div className="container-xl" style={{ display: "flex", gap: 64, alignItems: "center" }}>
+        <div className="container-xl hero-flex">
           {/* Left Hero Text */}
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
@@ -162,19 +226,13 @@ export default function HomePage() {
               </div>
             </div>
             
-            <h1 style={{
-              fontSize: 48,
-              fontWeight: 900,
-              lineHeight: 1.15,
-              marginBottom: 16,
-              letterSpacing: "-0.02em"
-            }}>
+            <h1 className="hero-h1">
               High-Frequency <br />
-              Digital Asset <span style={{ color: "var(--yellow)", textShadow: "0 0 20px var(--yellow-dim)" }}>Exchange Engine</span>
+              Digital Asset <span style={{ color: "var(--yellow)", textShadow: "0 0 20px var(--yellow-dim)" }}>Exchange</span>
             </h1>
             
             <p style={{ fontSize: 15, color: "var(--text-secondary)", marginBottom: 36, lineHeight: 1.7, maxWidth: 520 }}>
-              CloudExchange.in delivers institutional-grade order matching, real-time double-entry settlement verification, secure P2P escrow with anti-fraud metadata checks, and cryptographic passkey authentication.
+              CloudExchange delivers institutional-grade order matching, real-time double-entry settlement, secure P2P escrow with anti-fraud checks, and cryptographic passkey authentication.
             </p>
 
             {/* Functional register input redirection */}
@@ -211,15 +269,7 @@ export default function HomePage() {
           </div>
 
           {/* Right Live market card */}
-          <div style={{
-            width: 400,
-            background: "rgba(13, 27, 56, 0.45)",
-            borderRadius: 16,
-            border: "1px solid var(--border)",
-            backdropFilter: "blur(12px)",
-            overflow: "hidden",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.5)"
-          }}>
+          <div className="hero-market-card">
             <div style={{
               display: "flex",
               justifyContent: "space-between",
@@ -233,9 +283,7 @@ export default function HomePage() {
             </div>
             
             <div style={{ padding: "8px 0" }}>
-              {MARKETS.map((m) => {
-                const isBtc = m.symbol === "BTC";
-                const activePrice = isBtc ? btcPrice : m.price;
+              {marketsList.map((m) => {
                 return (
                   <Link key={m.symbol} href="/trade" style={{ textDecoration: "none" }}>
                     <div style={{
@@ -268,7 +316,7 @@ export default function HomePage() {
                         </div>
                       </div>
                       <div style={{ textAlign: "right", fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
-                        ${activePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ${m.price < 2 ? m.price.toFixed(4) : m.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <span style={{
@@ -294,11 +342,11 @@ export default function HomePage() {
       {/* ─── CONTINUOUS RUNNING TICKER BAR ─── */}
       <div className="bn-ticker-bar" style={{ background: "rgba(10, 17, 40, 0.5)", backdropFilter: "blur(4px)", borderBottom: "1px solid var(--border)" }}>
         <div className="bn-ticker-content">
-          {[...MARKETS, ...MARKETS].map((m, i) => (
+          {[...marketsList, ...marketsList].map((m, i) => (
             <div key={i} className="bn-ticker-item" style={{ borderRight: "1px solid var(--border)" }}>
               <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{m.symbol}/USDT</span>
-              <span style={{ color: m.symbol === "BTC" ? (btcPrice >= 65050 ? "var(--green)" : "var(--red)") : "var(--text-primary)" }}>
-                ${(m.symbol === "BTC" ? btcPrice : m.price).toLocaleString()}
+              <span style={{ color: m.change >= 0 ? "var(--green)" : "var(--red)" }}>
+                ${m.price < 2 ? m.price.toFixed(4) : m.price.toLocaleString()}
               </span>
               <span style={{ color: m.change >= 0 ? "var(--green)" : "var(--red)", fontSize: 11 }}>
                 {m.change >= 0 ? "+" : ""}{m.change}%
@@ -314,11 +362,11 @@ export default function HomePage() {
           <h2 style={{ fontSize: 32, fontWeight: 800, textAlign: "center", marginBottom: 12 }}>
             Engineered for Sub-Microsecond Performance
           </h2>
-          <p style={{ fontSize: 15, color: "var(--text-secondary)", textAlign: "center", marginBottom: 56, maxWidth: 640, margin: "0 auto 56px" }}>
+          <p style={{ fontSize: 15, color: "var(--text-secondary)", textAlign: "center", marginBottom: 48, maxWidth: 640, margin: "0 auto 48px" }}>
             CloudExchange incorporates high-performance systems architecture directly into our user interfaces.
           </p>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
+          <div className="features-grid">
             {[
               {
                 icon: <Cpu size={32} color="var(--cyan)" />,
@@ -371,8 +419,8 @@ export default function HomePage() {
       </section>
 
       {/* ─── SAFU SECURITY & PROOF OF RESERVES ─── */}
-      <section style={{ padding: "80px 0", background: "transparent" }}>
-        <div className="container-xl" style={{ display: "flex", gap: 64, alignItems: "center" }}>
+      <section style={{ padding: "64px 0", background: "transparent" }}>
+        <div className="container-xl reserves-flex">
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "var(--yellow)", letterSpacing: 2, marginBottom: 12 }}>
               100% COLLATERAL GUARANTEE
@@ -384,7 +432,7 @@ export default function HomePage() {
               We maintain absolute transparency. Our on-chain balances are verifiable via daily generated Merkle Tree hashes. In addition, 10% of all transaction fees are allocated to our Secure Asset Fund for Users (SAFU) insurance pool.
             </p>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            <div className="reserves-stats">
               {[
                 { count: "1.2x", text: "Minimum collateral backing ratio" },
                 { count: "100%", text: "Fully audited reserved backing" },
@@ -526,12 +574,12 @@ export default function HomePage() {
         color: "var(--text-secondary)"
       }}>
         <div className="container-xl">
-          <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr", gap: 48, marginBottom: 48 }}>
+          <div className="footer-grid">
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
                 <CloudExchangeLogo size={24} />
                 <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>
-                  Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span>
+                  Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
                 </span>
               </div>
               <p style={{ lineHeight: 1.8, marginBottom: 24 }}>
@@ -575,14 +623,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          <div style={{
-            borderTop: "1px solid var(--border-light)",
-            paddingTop: 24,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            fontSize: 12
-          }}>
+          <div className="footer-bottom">
             <span>© 2026 CloudExchange Group. All rights reserved.</span>
             <div style={{ display: "flex", gap: 16 }}>
               <a href="#" style={{ color: "var(--text-secondary)", textDecoration: "none" }}>Risk Warning</a>

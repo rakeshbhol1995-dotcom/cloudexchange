@@ -22,16 +22,16 @@ export default function SpaceBackground() {
       base: number; phase: number; speed: number;
       gold: boolean; cyan: boolean;
     }
-    const STAR_COUNT = Math.floor((W * H) / 5500);
+    const STAR_COUNT = Math.floor((W * H) / 4800);
     const stars: StarObj[] = Array.from({ length: STAR_COUNT }, () => ({
       x: Math.random() * W,
       y: Math.random() * H,
-      r: Math.random() * 1.6 + 0.2,
-      base: Math.random() * 0.55 + 0.25,
+      r: Math.random() * 1.8 + 0.2,
+      base: Math.random() * 0.6 + 0.25,
       phase: Math.random() * Math.PI * 2,
-      speed: Math.random() * 0.025 + 0.006,
-      gold: Math.random() < 0.04,
-      cyan: Math.random() < 0.03,
+      speed: Math.random() * 0.03 + 0.006,
+      gold: Math.random() < 0.055,
+      cyan: Math.random() < 0.04,
     }));
 
     // ── SHOOTING STARS ────────────────────────────────────────
@@ -39,7 +39,7 @@ export default function SpaceBackground() {
       x: number; y: number; vx: number; vy: number;
       len: number; life: number; maxLife: number; active: boolean;
     }
-    const meteors: Meteor[] = Array.from({ length: 4 }, () => ({
+    const meteors: Meteor[] = Array.from({ length: 5 }, () => ({
       x: 0, y: 0, vx: 0, vy: 0, len: 0, life: 0, maxLife: 0, active: false,
     }));
 
@@ -154,88 +154,110 @@ export default function SpaceBackground() {
       }
     }
 
-    // ── CRESCENT MOON ─────────────────────────────────────────
-    function drawMoon() {
-      const mx = W - Math.min(200, W * 0.15);
-      const my = 110;
-      const mr = 38;
+    // ── GLOWING STAR CLUSTER (replaces moon) ─────────────────
+    // Three large glowing "super stars" in the top-right region
+    const superStars = [
+      { ox: 0.82, oy: 0.10, baseR: 3.2, glowR: 55, color: "245,166,35", phase: 0 },
+      { ox: 0.91, oy: 0.06, baseR: 2.4, glowR: 38, color: "0,229,255",  phase: 1.3 },
+      { ox: 0.87, oy: 0.18, baseR: 1.8, glowR: 28, color: "200,160,255", phase: 2.7 },
+    ];
 
-      // 1. Outer halo / glowing corona
-      const halo = ctx.createRadialGradient(mx, my, mr * 0.5, mx, my, mr * 3.5);
-      halo.addColorStop(0, "rgba(245, 166, 35, 0.18)");
-      halo.addColorStop(0.35, "rgba(0, 229, 255, 0.05)");
-      halo.addColorStop(0.75, "rgba(120, 80, 255, 0.02)");
-      halo.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = halo;
-      ctx.beginPath();
-      ctx.arc(mx, my, mr * 3.5, 0, Math.PI * 2);
-      ctx.fill();
+    function drawStarCluster() {
+      superStars.forEach((ss) => {
+        const sx = W * ss.ox;
+        const sy = H * ss.oy;
+        const pulse = 0.85 + Math.sin(t * 0.012 + ss.phase) * 0.15;
+        const glowR = ss.glowR * pulse;
 
-      // 2. Pulsing aura ring
-      const ringR = mr * (1.4 + Math.sin(t * 0.015) * 0.08);
-      ctx.strokeStyle = `rgba(245, 166, 35, ${0.08 + Math.sin(t * 0.015) * 0.04})`;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(mx, my, ringR, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // 3. Perfect mathematical crescent moon (using quadratic curves)
-      ctx.save();
-      ctx.shadowBlur = 25;
-      ctx.shadowColor = "rgba(245, 166, 35, 0.65)";
-
-      // Gold → Cyan premium linear gradient
-      const moonGrad = ctx.createLinearGradient(mx - mr, my - mr, mx + mr, my + mr);
-      moonGrad.addColorStop(0, "#F5C842");
-      moonGrad.addColorStop(0.5, "#F5A623");
-      moonGrad.addColorStop(1, "#00E5FF");
-      ctx.fillStyle = moonGrad;
-
-      ctx.beginPath();
-      // Right-hand outer circle arc
-      ctx.arc(mx, my, mr, -Math.PI / 2, Math.PI / 2, false);
-      // Smooth inner quadratic curve back to the top
-      // Factor oscillates to change moon phase dynamically
-      const phaseFactor = 0.12 + Math.sin(t * 0.006) * 0.35;
-      ctx.quadraticCurveTo(mx + mr * phaseFactor, my, mx, my - mr);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-
-      // 4. Crater overlay (only visible on the lit surface by using clipping/drawing on crescent)
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(mx, my, mr, -Math.PI / 2, Math.PI / 2, false);
-      ctx.quadraticCurveTo(mx + mr * phaseFactor, my, mx, my - mr);
-      ctx.closePath();
-      ctx.clip();
-
-      // Draw subtle dark craters
-      [[mx - 5, my + 8, 2.8], [mx + 4, my - 12, 1.8], [mx - 12, my - 4, 1.5], [mx + 8, my + 14, 2.2]].forEach(([cx, cy, cr]) => {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.14)";
+        // Outer glow halo
+        const halo = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR * 2.2);
+        halo.addColorStop(0, `rgba(${ss.color},0.22)`);
+        halo.addColorStop(0.3, `rgba(${ss.color},0.08)`);
+        halo.addColorStop(0.7, `rgba(${ss.color},0.02)`);
+        halo.addColorStop(1, `rgba(${ss.color},0)`);
+        ctx.fillStyle = halo;
         ctx.beginPath();
-        ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+        ctx.arc(sx, sy, glowR * 2.2, 0, Math.PI * 2);
         ctx.fill();
+
+        // Inner bright core
+        const core = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR * 0.5);
+        core.addColorStop(0, `rgba(${ss.color},0.9)`);
+        core.addColorStop(0.5, `rgba(${ss.color},0.4)`);
+        core.addColorStop(1, `rgba(${ss.color},0)`);
+        ctx.save();
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = `rgba(${ss.color},0.8)`;
+        ctx.fillStyle = core;
+        ctx.beginPath();
+        ctx.arc(sx, sy, glowR * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Star point cross (4-point star burst)
+        const starR = ss.baseR * pulse;
+        const armLen = glowR * 0.85;
+        ctx.save();
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = `rgba(${ss.color},1)`;
+        ctx.strokeStyle = `rgba(${ss.color},${0.55 + Math.sin(t * 0.015 + ss.phase) * 0.25})`;
+        ctx.lineWidth = starR * 0.8;
+        ctx.lineCap = "round";
+        // Horizontal arm
+        ctx.beginPath();
+        ctx.moveTo(sx - armLen, sy);
+        ctx.lineTo(sx + armLen, sy);
+        ctx.stroke();
+        // Vertical arm
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - armLen * 0.7);
+        ctx.lineTo(sx, sy + armLen * 0.7);
+        ctx.stroke();
+        // Diagonal arms (thinner)
+        ctx.lineWidth = starR * 0.4;
+        ctx.strokeStyle = `rgba(${ss.color},${0.3 + Math.sin(t * 0.01 + ss.phase) * 0.15})`;
+        const diagLen = armLen * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(sx - diagLen, sy - diagLen * 0.6);
+        ctx.lineTo(sx + diagLen, sy + diagLen * 0.6);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(sx + diagLen, sy - diagLen * 0.6);
+        ctx.lineTo(sx - diagLen, sy + diagLen * 0.6);
+        ctx.stroke();
+        ctx.restore();
+
+        // Solid bright center dot
+        ctx.save();
+        ctx.shadowBlur = 25;
+        ctx.shadowColor = `rgba(${ss.color},1)`;
+        ctx.fillStyle = `rgba(255,255,255,${0.85 + Math.sin(t * 0.02 + ss.phase) * 0.15})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, starR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       });
-      ctx.restore();
 
-      // 5. Orbiting cosmic dust particles (Space stardust rings)
-      const particleCount = 8;
-      for (let i = 0; i < particleCount; i++) {
-        const angle = (t * 0.012) + (i * Math.PI * 2) / particleCount;
-        // Orbit path coordinates (ellipse)
-        const ox = mx + Math.cos(angle) * (mr * 1.6);
-        const oy = my + Math.sin(angle) * (mr * 0.7);
-        // Particle size pulse
-        const or = Math.max(0.6, 1.4 + Math.sin(angle) * 0.6);
-
-        ctx.fillStyle = i % 2 === 0 ? "rgba(0, 229, 255, 0.75)" : "rgba(245, 166, 35, 0.75)";
-        ctx.shadowBlur = 5;
-        ctx.shadowColor = i % 2 === 0 ? "#00E5FF" : "#F5A623";
+      // Tiny satellite stars orbiting the main gold super-star
+      const mainX = W * superStars[0].ox;
+      const mainY = H * superStars[0].oy;
+      const orbCount = 6;
+      for (let i = 0; i < orbCount; i++) {
+        const angle = (t * 0.008) + (i * Math.PI * 2) / orbCount;
+        const orbitRx = superStars[0].glowR * 1.55;
+        const orbitRy = superStars[0].glowR * 0.65;
+        const ox = mainX + Math.cos(angle) * orbitRx;
+        const oy = mainY + Math.sin(angle) * orbitRy;
+        const or = Math.max(0.5, 1.3 + Math.sin(angle * 2) * 0.5);
+        const col = i % 3 === 0 ? "0,229,255" : i % 3 === 1 ? "245,166,35" : "200,160,255";
+        ctx.save();
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = `rgba(${col},0.9)`;
+        ctx.fillStyle = `rgba(${col},0.8)`;
         ctx.beginPath();
         ctx.arc(ox, oy, or, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowBlur = 0;
+        ctx.restore();
       }
     }
 
@@ -276,7 +298,6 @@ export default function SpaceBackground() {
     const tick = () => {
       t++;
 
-      // Background fill
       ctx.fillStyle = "#040814";
       ctx.fillRect(0, 0, W, H);
 
@@ -333,7 +354,7 @@ export default function SpaceBackground() {
       });
 
       // Floating particles
-      if (t % 8 === 0 && particles.length < 35) spawnParticle();
+      if (t % 8 === 0 && particles.length < 40) spawnParticle();
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.life++;
@@ -347,7 +368,8 @@ export default function SpaceBackground() {
         ctx.fill();
       }
 
-      drawMoon();
+      // Draw the glowing star cluster instead of the moon
+      drawStarCluster();
 
       animId = requestAnimationFrame(tick);
     };
@@ -357,7 +379,6 @@ export default function SpaceBackground() {
     const onResize = () => {
       W = canvas.width = window.innerWidth;
       H = canvas.height = window.innerHeight;
-      // redistribute stars
       stars.forEach((s) => { s.x = Math.random() * W; s.y = Math.random() * H; });
       nebulae[0].x = W * 0.75; nebulae[0].y = H * 0.15;
       nebulae[1].x = W * 0.18; nebulae[1].y = H * 0.72;

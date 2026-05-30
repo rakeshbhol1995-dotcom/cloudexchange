@@ -1,0 +1,83 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "C:\\Users\\BUNTY\\Desktop\\cloud exchange 2\\contracts\\CloudExchangeEscrow.sol": {
+      "lastModificationDate": 1780120049665,
+      "contentHash": "b8e3b5f0fbdc53de166ab6881f20f67b",
+      "sourceName": "contracts/CloudExchangeEscrow.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "AccessControl",
+        "CloudExchangeEscrow",
+        "IERC20",
+        "Pausable",
+        "ReentrancyGuard"
+      ]
+    },
+    "C:\\Users\\BUNTY\\Desktop\\cloud exchange 2\\contracts\\MockUSDT.sol": {
+      "lastModificationDate": 1780058966733,
+      "contentHash": "4364bbfc0fe01c38eb10b9fd4db59ac4",
+      "sourceName": "contracts/MockUSDT.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./CloudExchangeEscrow.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "MockUSDT"
+      ]
+    }
+  }
+}

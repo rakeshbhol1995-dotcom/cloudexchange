@@ -14,10 +14,13 @@ import {
   ArrowLeft,
   Settings,
   ShieldAlert,
-  Server
+  Server,
+  UserCheck,
+  FileText
 } from "lucide-react";
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
+import Header from "../components/Header";
 
 interface KYCRequest {
   id: string;
@@ -25,7 +28,6 @@ interface KYCRequest {
   submittedAt: string;
   documentType: string;
   documentNumber: string;
-  selfieUrl: string; // Placeholder representation
   status: "Pending" | "Approved" | "Rejected";
 }
 
@@ -40,6 +42,28 @@ interface DisputedEscrow {
   status: "Disputed";
 }
 
+interface ListingApplication {
+  id: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  contractAddress: string;
+  network: string;
+  initialPrice: number;
+  website: string;
+  txHash: string;
+  submittedAt: string;
+  status: "Pending" | "Approved" | "Rejected";
+}
+
+interface MerchantApplication {
+  id: string;
+  username: string;
+  upiId: string;
+  depositAmount: number;
+  status: "Pending" | "Approved" | "Rejected";
+}
+
 interface CustomPair {
   symbol: string;
   name: string;
@@ -50,7 +74,7 @@ interface CustomPair {
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<"kyc" | "pairs" | "disputes" | "system">("kyc");
+  const [activeTab, setActiveTab] = useState<"kyc" | "pairs" | "listings" | "merchants" | "disputes" | "system">("kyc");
   
   // Custom pair states
   const [newSymbol, setNewSymbol] = useState("");
@@ -63,6 +87,8 @@ export default function AdminPage() {
   // Dynamic lists from localStorage
   const [kycRequests, setKycRequests] = useState<KYCRequest[]>([]);
   const [disputes, setDisputes] = useState<DisputedEscrow[]>([]);
+  const [listings, setListings] = useState<ListingApplication[]>([]);
+  const [merchants, setMerchants] = useState<MerchantApplication[]>([]);
   const [customPairs, setCustomPairs] = useState<CustomPair[]>([]);
   
   // Toast notifications
@@ -71,8 +97,8 @@ export default function AdminPage() {
   useEffect(() => {
     // 1. Load or initialize KYC requests
     const defaultKyc: KYCRequest[] = [
-      { id: "101", email: "bunty_trader@exchange.in", submittedAt: "2026-05-29 09:12", documentType: "PAN Card", documentNumber: "ABCDE1234F", selfieUrl: "/craters", status: "Pending" },
-      { id: "102", email: "rakesh_bhol@cloudexchange.in", submittedAt: "2026-05-29 11:30", documentType: "Aadhaar Card", documentNumber: "1234-5678-9012", selfieUrl: "/craters", status: "Pending" }
+      { id: "101", email: "bunty_trader@exchange.com", submittedAt: "2026-05-29 09:12", documentType: "PAN Card", documentNumber: "ABCDE1234F", status: "Pending" },
+      { id: "102", email: "rakesh_bhol@cloudexchange.com", submittedAt: "2026-05-29 11:30", documentType: "Aadhaar Card", documentNumber: "1234-5678-9012", status: "Pending" }
     ];
     const savedKyc = localStorage.getItem("admin_kyc_requests");
     if (savedKyc) {
@@ -95,7 +121,31 @@ export default function AdminPage() {
       localStorage.setItem("admin_disputed_escrows", JSON.stringify(defaultDisputes));
     }
 
-    // 3. Load Custom Pairs
+    // 3. Load Listing Applications
+    const defaultListings: ListingApplication[] = [
+      { id: "APP-5091", symbol: "GLD", name: "Sovereign Gold Token", decimals: 18, contractAddress: "0x3f12a89d1234cfef1a980bc9d123d", network: "ERC20", initialPrice: 72.50, website: "https://goldl1.org", txHash: "0x9812af67db3e12c12aefdf2145bcf112a9e32", submittedAt: "2026-05-29 12:45", status: "Pending" }
+    ];
+    const savedListings = localStorage.getItem("admin_listing_applications");
+    if (savedListings) {
+      setListings(JSON.parse(savedListings));
+    } else {
+      setListings(defaultListings);
+      localStorage.setItem("admin_listing_applications", JSON.stringify(defaultListings));
+    }
+
+    // 4. Load Merchant Applications
+    const defaultMerchants: MerchantApplication[] = [
+      { id: "M-309", username: "premium_liquidity@cloud.ex", upiId: "premium_desk@okaxis", depositAmount: 500, status: "Pending" }
+    ];
+    const savedMerchants = localStorage.getItem("admin_merchant_applications");
+    if (savedMerchants) {
+      setMerchants(JSON.parse(savedMerchants));
+    } else {
+      setMerchants(defaultMerchants);
+      localStorage.setItem("admin_merchant_applications", JSON.stringify(defaultMerchants));
+    }
+
+    // 5. Load Custom Pairs
     const savedPairs = localStorage.getItem("admin_custom_trading_pairs");
     if (savedPairs) {
       setCustomPairs(JSON.parse(savedPairs));
@@ -107,7 +157,7 @@ export default function AdminPage() {
     setTimeout(() => setToast(""), 3500);
   };
 
-  // Add custom trading pair
+  // Add custom trading pair manually
   const handleAddPair = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSymbol || !newName || !newPrice) return;
@@ -121,26 +171,75 @@ export default function AdminPage() {
       color: newColor
     };
 
-    const updatedPairs = [...customPairs, newPair];
-    setCustomPairs(updatedPairs);
-    localStorage.setItem("admin_custom_trading_pairs", JSON.stringify(updatedPairs));
-    
-    // Also save custom pair in the asset balances list to enable user wallets
-    const storedBalances = localStorage.getItem("user_asset_balances");
-    if (storedBalances) {
-      const parsed = JSON.parse(storedBalances);
-      if (!parsed.some((a: any) => a.symbol === newPair.symbol)) {
-        parsed.push({ symbol: newPair.symbol, name: newPair.name, amount: 0.0, inOrder: 0.0, color: newPair.color });
-        localStorage.setItem("user_asset_balances", JSON.stringify(parsed));
-      }
-    }
-
-    triggerToast(`Successfully registered and deployed pair: ${newPair.symbol}/USDT`);
+    deployPairToEcosystem(newPair);
     setNewSymbol("");
     setNewName("");
     setNewPrice("");
     setNewChange("");
     setNewVolume("");
+  };
+
+  const deployPairToEcosystem = (pair: CustomPair) => {
+    const updatedPairs = [...customPairs, pair];
+    setCustomPairs(updatedPairs);
+    localStorage.setItem("admin_custom_trading_pairs", JSON.stringify(updatedPairs));
+    
+    // Create default wallet balance
+    const storedBalances = localStorage.getItem("user_asset_balances");
+    if (storedBalances) {
+      const parsed = JSON.parse(storedBalances);
+      if (!parsed.some((a: any) => a.symbol === pair.symbol)) {
+        parsed.push({ symbol: pair.symbol, name: pair.name, amount: 0.0, inOrder: 0.0, color: pair.color });
+        localStorage.setItem("user_asset_balances", JSON.stringify(parsed));
+      }
+    }
+    triggerToast(`Deploy SUCCESS: Deployed pair ${pair.symbol}/USDT & ${pair.symbol}/INR`);
+  };
+
+  // Resolve Listing application
+  const handleResolveListing = (id: string, approve: boolean) => {
+    const updated = listings.map(l => {
+      if (l.id === id) {
+        l.status = approve ? "Approved" : "Rejected";
+      }
+      return l;
+    });
+    setListings(updated);
+    localStorage.setItem("admin_listing_applications", JSON.stringify(updated));
+
+    const target = listings.find(l => l.id === id);
+    if (target && approve) {
+      // Deploy token to dynamic list
+      deployPairToEcosystem({
+        symbol: target.symbol,
+        name: target.name,
+        price: target.initialPrice,
+        change24h: 0.00,
+        volume24h: 10000,
+        color: "#E67E22"
+      });
+    }
+    triggerToast(`Listing application #${id} ${approve ? "Approved & Listed" : "Rejected"}.`);
+  };
+
+  // Resolve Merchant application
+  const handleResolveMerchant = (id: string, approve: boolean) => {
+    const updated = merchants.map(m => {
+      if (m.id === id) {
+        m.status = approve ? "Approved" : "Rejected";
+      }
+      return m;
+    });
+    setMerchants(updated);
+    localStorage.setItem("admin_merchant_applications", JSON.stringify(updated));
+
+    const target = merchants.find(m => m.id === id);
+    if (target && approve) {
+      localStorage.setItem("is_p2p_merchant", "true");
+      // Add custom UPI details to system storage
+      localStorage.setItem("merchant_upi_id", target.upiId);
+    }
+    triggerToast(`Merchant application #${id} ${approve ? "Approved" : "Rejected"}.`);
   };
 
   // Resolve KYC status
@@ -154,7 +253,6 @@ export default function AdminPage() {
     setKycRequests(updated);
     localStorage.setItem("admin_kyc_requests", JSON.stringify(updated));
 
-    // Update selected user's KYC tier in system
     const target = kycRequests.find(k => k.id === id);
     if (target && approve) {
       localStorage.setItem("kyc_tier", "Tier-2 Verified (Identity Approved)");
@@ -174,53 +272,17 @@ export default function AdminPage() {
     <div style={{ minHeight: "100vh", color: "var(--text-primary)", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
       <SpaceBackground />
 
-      {/* Header */}
-      <header style={{
-        height: 64,
-        background: "rgba(10, 17, 40, 0.75)",
-        backdropFilter: "blur(12px)",
-        borderBottom: "1px solid var(--border)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 24px",
-        zIndex: 100
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Link href="/" className="btn-ghost" style={{ display: "flex", alignItems: "center", gap: 6, textDecoration: "none", color: "var(--text-secondary)", fontSize: 13 }}>
-            <ArrowLeft size={16} /> Home
-          </Link>
-          <div style={{ width: 1, height: 20, background: "var(--border)" }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <CloudExchangeLogo size={24} />
-            <span style={{ fontSize: 18, fontWeight: 800 }}>
-              Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span> <span style={{ fontSize: 10, color: "var(--yellow)", background: "rgba(245, 166, 35, 0.1)", padding: "2px 8px", borderRadius: 4, marginLeft: 8, border: "1px solid rgba(245, 166, 35, 0.2)" }}>ADMIN</span>
-            </span>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#10b981" }}>
-            <Activity size={14} /> Matching Engine: Live (Core Pinned)
-          </div>
-        </div>
-      </header>
+      <Header activeTab="admin" />
 
       {/* Admin Content wrapper */}
-      <div style={{ flex: 1, display: "flex", zIndex: 10 }}>
+      <div className="admin-layout-split" style={{ flex: 1, zIndex: 10 }}>
         {/* Sidebar Nav */}
-        <aside style={{
-          width: 260,
-          background: "linear-gradient(180deg, rgba(10, 17, 40, 0.6) 0%, rgba(4, 8, 20, 0.3) 100%)",
-          borderRight: "1px solid var(--border)",
-          padding: 24,
-          display: "flex",
-          flexDirection: "column",
-          gap: 8
-        }}>
+        <aside className="admin-sidebar">
           {[
             { id: "kyc", label: "User KYC Verification", icon: <Users size={16} /> },
-            { id: "pairs", label: "Custom Trading Pairs", icon: <Coins size={16} /> },
+            { id: "listings", label: "Paid Listing Applications", icon: <FileText size={16} /> },
+            { id: "merchants", label: "Merchant Approvals", icon: <UserCheck size={16} /> },
+            { id: "pairs", label: "Manual Custom Pairs", icon: <Coins size={16} /> },
             { id: "disputes", label: "P2P Escrow Disputes", icon: <ShieldAlert size={16} /> },
             { id: "system", label: "System Health & WAL", icon: <Server size={16} /> },
           ].map((item) => (
@@ -289,17 +351,13 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   kycRequests.map((req) => (
-                    <div key={req.id} style={{
+                    <div key={req.id} className="admin-card-flex" style={{
                       background: "rgba(13, 27, 56, 0.45)",
                       border: "1px solid var(--border)",
                       borderRadius: 12,
-                      padding: 24,
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center"
+                      padding: 24
                     }}>
                       <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-                        {/* Selfie Mock Circular display */}
                         <div style={{ width: 56, height: 56, borderRadius: "50%", background: "radial-gradient(circle, var(--cyan-dim) 0%, rgba(4,8,20,0.5) 100%)", border: "1.5px solid var(--cyan)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
                           👤
                         </div>
@@ -332,14 +390,122 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* LISTINGS Tab */}
+          {activeTab === "listings" && (
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Paid Listing Verification Queue</h2>
+              <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 24 }}>Verify USDT tx receipts and deploy custom projects onto the dynamic exchange markets.</p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {listings.length === 0 ? (
+                  <div style={{ background: "rgba(10, 17, 40, 0.45)", borderRadius: 12, padding: 48, textAlign: "center", border: "1px solid var(--border)" }}>
+                    <ShieldCheck size={48} color="var(--green)" style={{ margin: "0 auto 16px" }} />
+                    <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>No token listing applications currently pending.</p>
+                  </div>
+                ) : (
+                  listings.map((app) => (
+                    <div key={app.id} className="admin-card-flex" style={{
+                      background: "rgba(13, 27, 56, 0.45)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 12,
+                      padding: 24,
+                      gap: 20
+                    }}>
+                      <div className="admin-card-flex" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 16, marginBottom: 16, width: "100%" }}>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 15, fontWeight: 700 }}>{app.name} ({app.symbol})</span>
+                            <span style={{ fontSize: 9, background: "rgba(245,166,35,0.15)", border: "1px solid rgba(245,166,35,0.3)", color: "var(--yellow)", padding: "2px 6px", borderRadius: 4 }}>5,000 USDT FEE LOCKED</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+                            Chain: <span style={{ color: "var(--cyan)" }}>{app.network}</span> &bull; Address: <span style={{ fontFamily: "monospace" }}>{app.contractAddress}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+                            TXID: <span style={{ fontFamily: "monospace", color: "var(--yellow)" }}>{app.txHash}</span>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Submitted: {app.submittedAt}</span>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginTop: 4 }}>Price: ${app.initialPrice}</div>
+                        </div>
+                      </div>
+
+                      {app.status === "Pending" ? (
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                          <button onClick={() => handleResolveListing(app.id, false)} className="btn-outline" style={{ color: "var(--red)", borderColor: "rgba(239, 68, 68, 0.3)", padding: "6px 12px", fontSize: 12 }}>
+                            Reject Verification
+                          </button>
+                          <button onClick={() => handleResolveListing(app.id, true)} className="btn-yellow" style={{ padding: "6px 12px", fontSize: 12 }}>
+                            Verify Payment & List Token
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: app.status === "Approved" ? "var(--green)" : "var(--red)" }}>
+                          {app.status.toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* MERCHANTS Tab */}
+          {activeTab === "merchants" && (
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>P2P Merchant Applications</h2>
+              <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 24 }}>Approve trust ratings and security collateral locks to authorize P2P merchants.</p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {merchants.length === 0 ? (
+                  <div style={{ background: "rgba(10, 17, 40, 0.45)", borderRadius: 12, padding: 48, textAlign: "center", border: "1px solid var(--border)" }}>
+                    <ShieldCheck size={48} color="var(--green)" style={{ margin: "0 auto 16px" }} />
+                    <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>No P2P merchant requests pending.</p>
+                  </div>
+                ) : (
+                  merchants.map((m) => (
+                    <div key={m.id} className="admin-card-flex" style={{
+                      background: "rgba(13, 27, 56, 0.45)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 12,
+                      padding: 24
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 700 }}>{m.username}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+                          UPI ID: <span style={{ color: "var(--cyan)" }}>{m.upiId}</span> &bull; Security Deposit: <span style={{ color: "var(--yellow)" }}>{m.depositAmount} USDT (LOCKED)</span>
+                        </div>
+                      </div>
+
+                      {m.status === "Pending" ? (
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={() => handleResolveMerchant(m.id, false)} className="btn-outline" style={{ color: "var(--red)", borderColor: "rgba(239, 68, 68, 0.3)", padding: "6px 12px", fontSize: 12 }}>
+                            Reject
+                          </button>
+                          <button onClick={() => handleResolveMerchant(m.id, true)} className="btn-yellow" style={{ padding: "6px 12px", fontSize: 12 }}>
+                            Authorize Merchant
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 13, fontWeight: 700, color: m.status === "Approved" ? "var(--green)" : "var(--red)" }}>
+                          {m.status.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
           {/* PAIRS Tab */}
           {activeTab === "pairs" && (
             <div>
-              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Add Ecosystem Trading Pairs</h2>
-              <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 24 }}>Instantly register and deploy custom tokens on CloudExchange matching servers.</p>
+              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Manual Custom Pair Registry</h2>
+              <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 24 }}>Manually input and deploy custom pairs immediately into the database.</p>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 2fr", gap: 32 }}>
-                {/* Form to create */}
+              <div className="list-token-grid" style={{ gap: 32 }}>
                 <form onSubmit={handleAddPair} style={{
                   background: "rgba(13, 27, 56, 0.45)",
                   border: "1px solid var(--border)",
@@ -387,24 +553,20 @@ export default function AdminPage() {
                   </button>
                 </form>
 
-                {/* Active custom list */}
                 <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Deployments Queue</h3>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Manual Deployed Queue</h3>
                   {customPairs.length === 0 ? (
                     <div style={{ background: "rgba(10, 17, 40, 0.2)", border: "1px dashed var(--border)", borderRadius: 12, padding: 48, textAlign: "center", color: "var(--text-secondary)", fontSize: 13 }}>
-                      No custom pairs deployed yet. Fill the form to create.
+                      No manual pairs deployed yet.
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       {customPairs.map((p, idx) => (
-                        <div key={idx} style={{
+                        <div key={idx} className="admin-card-flex" style={{
                           background: "rgba(13, 27, 56, 0.35)",
                           border: "1px solid var(--border)",
                           borderRadius: 8,
-                          padding: "16px 20px",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center"
+                          padding: "16px 20px"
                         }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                             <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.color }} />
@@ -438,17 +600,17 @@ export default function AdminPage() {
                 {disputes.length === 0 ? (
                   <div style={{ background: "rgba(10, 17, 40, 0.45)", borderRadius: 12, padding: 48, textAlign: "center", border: "1px solid var(--border)" }}>
                     <ShieldCheck size={48} color="var(--green)" style={{ margin: "0 auto 16px" }} />
-                    <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>All dispute tickets cleared. Zero pending cases.</p>
+                    <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>All dispute tickets cleared.</p>
                   </div>
                 ) : (
                   disputes.map((d) => (
-                    <div key={d.id} style={{
+                    <div key={d.id} className="admin-card-flex" style={{
                       background: "rgba(13, 27, 56, 0.45)",
                       border: "1px solid var(--border)",
                       borderRadius: 12,
                       padding: 24
                     }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border)", paddingBottom: 16, marginBottom: 16 }}>
+                      <div className="admin-card-flex" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 16, marginBottom: 16, width: "100%" }}>
                         <div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <span style={{ fontSize: 14, fontWeight: 700, color: "var(--yellow)" }}>{d.id}</span>
@@ -464,9 +626,9 @@ export default function AdminPage() {
                         </div>
                       </div>
 
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div className="admin-card-flex" style={{ width: "100%" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--green)", fontSize: 12 }}>
-                          <CheckCircle2 size={14} /> Buyer uploaded verified IMPS transaction slip (EXIF check passed).
+                          <CheckCircle2 size={14} /> Buyer uploaded verified IMPS transaction slip.
                         </div>
                         <div style={{ display: "flex", gap: 8 }}>
                           <button onClick={() => handleResolveDispute(d.id, "seller")} className="btn-outline" style={{ color: "var(--red)", borderColor: "rgba(239, 68, 68, 0.3)", padding: "6px 12px", fontSize: 12 }}>
@@ -490,7 +652,7 @@ export default function AdminPage() {
               <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Core Infrastructure Metrics</h2>
               <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 24 }}>Real-time health indices of the HFT matching engine and double-entry ledger database.</p>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20, marginBottom: 32 }}>
+              <div className="grid-responsive-4" style={{ marginBottom: 32 }}>
                 {[
                   { title: "Matching Latency", val: "0.12 μs", desc: "Median order process speed", ok: true },
                   { title: "Peak Ingestion", val: "2,450,000 tx/s", desc: "DPDK Kernel bypass queue", ok: true },
@@ -522,7 +684,7 @@ export default function AdminPage() {
                   <Settings size={16} /> WAL (Write-Ahead Log) Flush Indexer
                 </h3>
                 <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 16 }}>
-                  Our zero-copy memory-mapped WAL is continuously writing execution events. In case of matching engine crash, the state replayer will rebuild order histories in 24 microseconds.
+                  Our zero-copy memory-mapped WAL is continuously writing execution events.
                 </p>
                 <div style={{ background: "rgba(0, 0, 0, 0.2)", borderRadius: 6, padding: 12, fontFamily: "monospace", fontSize: 11, color: "var(--cyan)" }}>
                   [info] WAL Flush Success. Block sequence 2,892,102. Hash: 0xf3a8d11c9...

@@ -22,10 +22,12 @@ import {
   X,
   TrendingUp,
   ShieldAlert,
-  Coins
+  Coins,
+  Smartphone
 } from "lucide-react";
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
+import Header from "../components/Header";
 
 interface AssetBalance {
   symbol: string;
@@ -135,6 +137,8 @@ export default function KycWalletHub() {
   const [authCode, setAuthCode] = useState("");
   const [emailCode, setEmailCode] = useState("");
   const [emailCountdown, setEmailCountdown] = useState(0);
+  const [smsCode, setSmsCode] = useState("");
+  const [smsCountdown, setSmsCountdown] = useState(0);
   const [txHistory, setTxHistory] = useState<TxHistoryItem[]>([]);
   const [toastMessage, setToastMessage] = useState("");
   const [toastType, setToastType] = useState<"success" | "error">("success");
@@ -151,7 +155,7 @@ export default function KycWalletHub() {
   const [progressVal, setProgressVal] = useState(0);
 
   // Coin price multiplier map to calculate approximate USD values in real time
-  const coinPriceMap: Record<string, number> = {
+  const [coinPriceMap, setCoinPriceMap] = useState<Record<string, number>>({
     USDT: 1.00,
     BTC: 65050.00,
     ETH: 3450.00,
@@ -163,7 +167,7 @@ export default function KycWalletHub() {
     PEPE: 0.000014,
     LINK: 16.50,
     SUI: 1.15
-  };
+  });
 
   // Sync state with localStorage
   useEffect(() => {
@@ -242,6 +246,34 @@ export default function KycWalletHub() {
     };
   }, []);
 
+  // Fetch real-time coin prices from Binance public REST API
+  useEffect(() => {
+    const fetchKycPrices = async () => {
+      try {
+        const res = await fetch("https://api.binance.com/api/v3/ticker/price");
+        if (!res.ok) throw new Error("Binance API error");
+        const data = await res.json();
+        
+        setCoinPriceMap(prev => {
+          const updated = { ...prev };
+          data.forEach((item: any) => {
+            const symWithoutUsdt = item.symbol.replace("USDT", "");
+            if (updated[symWithoutUsdt] !== undefined && symWithoutUsdt !== "USDT") {
+              updated[symWithoutUsdt] = parseFloat(item.price);
+            }
+          });
+          return updated;
+        });
+      } catch (err) {
+        console.warn("Binance API offline, keeping simulated pricing: ", err);
+      }
+    };
+
+    fetchKycPrices();
+    const iv = setInterval(fetchKycPrices, 8000);
+    return () => clearInterval(iv);
+  }, []);
+
   // Update total USD wallet value based on asset balances and mock prices
   useEffect(() => {
     const total = assets.reduce((sum, asset) => {
@@ -269,13 +301,20 @@ export default function KycWalletHub() {
     }
   }, [modalType, activeModalCoin, selectedNetwork]);
 
-  // 2FA Email code verification timer countdown
+  // 2FA code verification timer countdowns
   useEffect(() => {
     if (emailCountdown > 0) {
       const timer = setTimeout(() => setEmailCountdown(c => c - 1), 1000);
       return () => clearTimeout(timer);
     }
   }, [emailCountdown]);
+
+  useEffect(() => {
+    if (smsCountdown > 0) {
+      const timer = setTimeout(() => setSmsCountdown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [smsCountdown]);
 
   const handleLogout = () => {
     localStorage.removeItem("user_logged_in");
@@ -311,6 +350,11 @@ export default function KycWalletHub() {
     triggerToast("Email confirmation verification code sent to security inbox.");
   };
 
+  const handleSendSmsCode = () => {
+    setSmsCountdown(60);
+    triggerToast("SMS OTP token dispatched to your registered mobile telephone number.");
+  };
+
   const handleWithdrawalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!withdrawAddress) {
@@ -332,12 +376,13 @@ export default function KycWalletHub() {
     setShow2faOverlay(true);
     setAuthCode("");
     setEmailCode("");
+    setSmsCode("");
   };
 
   // Complete Withdrawal transaction after security verification
   const handleVerifyWithdrawal = () => {
-    if (authCode.length < 6 || emailCode.length < 6) {
-      triggerToast("Invalid authorization code sequence.", "error");
+    if (authCode.length < 6 || emailCode.length < 6 || smsCode.length < 6) {
+      triggerToast("Invalid authentication sequence. Please fill Google Authenticator, Email OTP, and SMS OTP codes.", "error");
       return;
     }
 
@@ -527,105 +572,62 @@ export default function KycWalletHub() {
         </div>
       )}
 
-      {/* HEADER */}
-      <header style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 100,
-        background: "rgba(10, 17, 40, 0.75)",
-        backdropFilter: "blur(12px)",
-        borderBottom: "1px solid var(--border)",
-        height: 64,
-        display: "flex",
-        alignItems: "center",
-        padding: "0 24px",
-        justifyContent: "space-between"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-            <CloudExchangeLogo size={32} />
-            <span style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", letterSpacing: -0.5 }}>
-              Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span>
-            </span>
-          </Link>
-
-          <nav style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <Link href="/" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>Home</Link>
-            <Link href="/coins" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>Coins</Link>
-            <Link href="/trade" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>Trade Terminal</Link>
-            <Link href="/p2p" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>P2P Fiat</Link>
-            <Link href="/kyc" className="btn-ghost active" style={{ fontSize: 13, textDecoration: "none", color: "var(--yellow)" }}>KYC & Wallet</Link>
-            <Link href="/ledger" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>Ledger Audit</Link>
-          </nav>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {isLoggedIn ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{userEmail}</span>
-              <button onClick={handleLogout} className="btn-outline" style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, cursor: "pointer", borderRadius: 6 }}>
-                <LogOut size={14} /> Log Out
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Link href="/login" style={{ color: "var(--text-primary)", fontWeight: 600, fontSize: 13, padding: "8px 18px", borderRadius: 8, textDecoration: "none", border: "1px solid var(--border)" }}>Log In</Link>
-              <Link href="/register" style={{ background: "var(--yellow)", color: "#000", fontWeight: 700, fontSize: 13, padding: "8px 18px", borderRadius: 8, textDecoration: "none" }}>Sign Up</Link>
-            </div>
-          )}
-        </div>
-      </header>
+      <Header activeTab="kyc" />
 
       {/* BODY */}
       <div className="container-xl" style={{ flex: 1, padding: "30px 24px", display: "flex", flexDirection: "column", gap: 24, zIndex: 10 }}>
         
         {/* Header Summary */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div className="kyc-header-strip">
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ background: "var(--yellow-dim)", color: "var(--yellow)", padding: "4px 12px", borderRadius: 20, fontSize: 10, fontWeight: 700 }}>PORTFOLIO CONTROL DESK</span>
               <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Audit & Identity Services</span>
             </div>
-            <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.01em", marginTop: 6 }}>
+            <h1 className="responsive-h1">
               {activeTab === "wallet" ? "Assets & Wallet Ledger" : "Identity Verification Center"}
             </h1>
           </div>
 
           {/* Tab Selector buttons */}
-          <div style={{ display: "flex", background: "rgba(0,0,0,0.25)", border: "1px solid var(--border)", padding: 4, borderRadius: 8 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", background: "rgba(0,0,0,0.25)", border: "1px solid var(--border)", padding: 4, borderRadius: 8, gap: 4, width: "100%", maxWidth: 400 }}>
             <button 
               onClick={() => setActiveTab("wallet")}
               style={{
+                flex: 1,
+                minWidth: 140,
                 background: activeTab === "wallet" ? "var(--yellow)" : "transparent",
                 color: activeTab === "wallet" ? "#000" : "var(--text-secondary)",
                 border: "none",
                 borderRadius: 6,
-                padding: "8px 20px",
+                padding: "8px 12px",
                 fontSize: 12,
                 fontWeight: 700,
                 cursor: "pointer",
                 transition: "all 0.2s"
               }}
             >
-              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 <Wallet size={14} /> My Wallet Assets
               </span>
             </button>
             <button 
               onClick={() => setActiveTab("kyc")}
               style={{
+                flex: 1,
+                minWidth: 140,
                 background: activeTab === "kyc" ? "var(--yellow)" : "transparent",
                 color: activeTab === "kyc" ? "#000" : "var(--text-secondary)",
                 border: "none",
                 borderRadius: 6,
-                padding: "8px 20px",
+                padding: "8px 12px",
                 fontSize: 12,
                 fontWeight: 700,
                 cursor: "pointer",
                 transition: "all 0.2s"
               }}
             >
-              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 <ShieldCheck size={14} /> KYC Verification
               </span>
             </button>
@@ -636,15 +638,11 @@ export default function KycWalletHub() {
         {activeTab === "wallet" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
             {/* Total Balance Card */}
-            <div style={{
+            <div className="kyc-stats-grid" style={{
               background: "rgba(10, 17, 40, 0.65)",
               border: "1px solid var(--border)",
               borderRadius: 16,
               padding: 24,
-              display: "grid",
-              gridTemplateColumns: "1.5fr 1fr 1fr",
-              alignItems: "center",
-              gap: 32,
               backdropFilter: "blur(12px)"
             }}>
               <div>
@@ -660,7 +658,7 @@ export default function KycWalletHub() {
                 </div>
               </div>
 
-              <div style={{ borderLeft: "1px solid var(--border-light)", paddingLeft: 32 }}>
+              <div className="kyc-stats-middle">
                 <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>IDENTITY SECURITY TIER</div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: kycStatus.includes("Tier-2") ? "var(--green)" : "var(--yellow)", marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
                   <ShieldCheck size={18} /> {kycStatus.split(" ")[0]} Verified
@@ -693,9 +691,9 @@ export default function KycWalletHub() {
               padding: 24,
               backdropFilter: "blur(12px)"
             }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div className="responsive-search-header" style={{ marginBottom: 20 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 800 }}>Account Asset Holdings</h3>
-                <div style={{ position: "relative", width: 280 }}>
+                <div style={{ position: "relative", width: "100%", maxWidth: 280 }}>
                   <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "var(--text-secondary)" }} />
                   <input 
                     className="bn-input bn-input-sm" 
@@ -709,13 +707,13 @@ export default function KycWalletHub() {
 
               {/* Table */}
               <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+                <table className="responsive-data-table" style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)", fontSize: 11, color: "var(--text-secondary)" }}>
                       <th style={{ padding: "12px 16px" }}>Asset</th>
                       <th style={{ padding: "12px 16px" }}>Available Balance</th>
-                      <th style={{ padding: "12px 16px" }}>In Order Balance</th>
-                      <th style={{ padding: "12px 16px" }}>Estimated Value (USD)</th>
+                      <th className="hide-mobile" style={{ padding: "12px 16px" }}>In Order Balance</th>
+                      <th className="hide-mobile" style={{ padding: "12px 16px" }}>Estimated Value (USD)</th>
                       <th style={{ padding: "12px 16px", textAlign: "right" }}>Actions</th>
                     </tr>
                   </thead>
@@ -754,16 +752,16 @@ export default function KycWalletHub() {
                               {asset.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })}
                             </span>
                           </td>
-                          <td style={{ padding: "14px 16px", color: "var(--text-secondary)" }}>
+                          <td className="hide-mobile" style={{ padding: "14px 16px", color: "var(--text-secondary)" }}>
                             {asset.inOrder.toFixed(4)}
                           </td>
-                          <td style={{ padding: "14px 16px" }}>
+                          <td className="hide-mobile" style={{ padding: "14px 16px" }}>
                             <span style={{ fontWeight: 600, color: "var(--cyan)" }}>
                               ${usdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           </td>
                           <td style={{ padding: "14px 16px", textAlign: "right" }}>
-                            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                            <div className="action-buttons-wrap">
                               <button onClick={() => openModal("deposit", asset.symbol)} className="btn-outline bn-tab-sm" style={{ padding: "4px 12px", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
                                 <ArrowDownLeft size={12} /> Deposit
                               </button>
@@ -797,7 +795,7 @@ export default function KycWalletHub() {
               </div>
               
               <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 12 }}>
+                <table className="responsive-data-table" style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 12 }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text-secondary)" }}>
                       <th style={{ padding: 10 }}>TxID</th>
@@ -845,14 +843,11 @@ export default function KycWalletHub() {
         {activeTab === "kyc" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
             {/* Current KYC status summary */}
-            <div style={{
-              background: "rgba(10, 17, 40, 0.65)",
+            <div className="responsive-flex-header" style={{
+              background: "rgba(10, 17, 40, 0.45)",
               border: "1px solid var(--border)",
               borderRadius: 16,
               padding: 24,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
               backdropFilter: "blur(12px)"
             }}>
               <div>
@@ -873,7 +868,7 @@ export default function KycWalletHub() {
             </div>
 
             {/* Grid forms */}
-            <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 24, alignItems: "flex-start" }}>
+            <div className="responsive-kyc-grid" style={{ alignItems: "flex-start" }}>
               
               {/* STEP 1: DOCUMENT SUBMISSION */}
               <div style={{ background: "rgba(10, 17, 40, 0.45)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 16, padding: 24 }}>
@@ -914,7 +909,7 @@ export default function KycWalletHub() {
                   </div>
 
                   {/* Upload boxes */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="grid-responsive-2">
                     <div>
                       <label style={{ fontSize: 10, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>FRONT SIDE SCAN</label>
                       <div
@@ -1271,6 +1266,33 @@ export default function KycWalletHub() {
                       </div>
                     </div>
 
+                    {/* Mobile SMS OTP verify code */}
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>MOBILE SMS VERIFICATION CODE</label>
+                        <button 
+                          type="button" 
+                          onClick={handleSendSmsCode}
+                          disabled={smsCountdown > 0}
+                          style={{ background: "none", border: "none", color: "var(--cyan)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+                        >
+                          {smsCountdown > 0 ? `Resend (${smsCountdown}s)` : "Get Code"}
+                        </button>
+                      </div>
+                      <div style={{ position: "relative" }}>
+                        <Smartphone size={14} style={{ position: "absolute", left: 12, top: 12, color: "var(--text-muted)" }} />
+                        <input 
+                          type="text" 
+                          maxLength={6} 
+                          placeholder="Enter 6-digit SMS OTP" 
+                          className="bn-input bn-input-sm" 
+                          value={smsCode}
+                          onChange={e => setSmsCode(e.target.value.replace(/\D/g, ""))}
+                          style={{ paddingLeft: 34 }} 
+                        />
+                      </div>
+                    </div>
+
                     {/* Google Authenticator */}
                     <div>
                       <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>
@@ -1308,7 +1330,7 @@ export default function KycWalletHub() {
                         onClick={handleVerifyWithdrawal} 
                         className="btn-yellow" 
                         style={{ flex: 1 }}
-                        disabled={authCode.length < 6 || emailCode.length < 6}
+                        disabled={authCode.length < 6 || emailCode.length < 6 || smsCode.length < 6}
                       >
                         Confirm Dispatch
                       </button>

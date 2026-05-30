@@ -1,0 +1,12 @@
+[package]
+name = "backup-service"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "backup-service"
+path = "src/restore_drills.rs"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }

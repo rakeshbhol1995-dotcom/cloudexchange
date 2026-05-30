@@ -1,0 +1,14 @@
+[package]
+name = "goldchain-crypto"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+blake3 = "1.5.1"
+ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
+bech32 = "0.9.1"
+rand = "0.8.5"
+serde = { version = "1.0", features = ["derive"] }
+borsh = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+

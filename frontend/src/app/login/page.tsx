@@ -1,17 +1,103 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { Key, Mail, ShieldAlert, Sparkles, Smartphone, ArrowLeft } from "lucide-react";
+import { Key, Mail, ShieldAlert, Sparkles, Smartphone, ArrowLeft, Camera, ShieldCheck } from "lucide-react";
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
+import { generateDeviceFingerprint } from "../utils/fingerprint";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
-  const [step, setStep] = useState<"email" | "password" | "mfa">("email");
+  const [step, setStep] = useState<"email" | "password" | "mfa" | "selfie_verification">("email");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Simulated multi-device challenge toggle for live presentations
+  const [simulateDifferentDevice, setSimulateDifferentDevice] = useState(false);
+
+  // Selfie liveness simulation states
+  const [selfieStep, setSelfieStep] = useState<"position" | "blink" | "smile" | "analyzing" | "completed">("position");
+  const [selfieLogs, setSelfieLogs] = useState("Position your face inside the dynamic security ring...");
+  const [selfieProgress, setSelfieProgress] = useState(0);
+
+  // Temporary container for login success parameters to apply after selfie check
+  const [pendingLoginData, setPendingLoginData] = useState<any>(null);
+
+  // Trigger liveness animation automatically if step changes to selfie_verification
+  useEffect(() => {
+    if (step === "selfie_verification") {
+      setSelfieStep("position");
+      setSelfieProgress(0);
+      setSelfieLogs("Aligning face profile inside the authentication area...");
+      
+      let timer1 = setTimeout(() => {
+        setSelfieStep("blink");
+        setSelfieLogs("BLINK YOUR EYES 3 TIMES");
+      }, 3000);
+
+      let timer2 = setTimeout(() => {
+        setSelfieStep("smile");
+        setSelfieLogs("HOLD A CLEAR SMILE");
+      }, 7000);
+
+      let timer3 = setTimeout(() => {
+        setSelfieStep("analyzing");
+        setSelfieLogs("Verifying liveness biometrics telemetry...");
+      }, 10500);
+
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+        clearTimeout(timer3);
+      };
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (selfieStep === "analyzing") {
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += 10;
+        setSelfieProgress(progress);
+        if (progress >= 100) {
+          clearInterval(interval);
+          setSelfieStep("completed");
+          setSelfieLogs("IDENTITY CONFIRMED. AUTHORIZING NEW TERMINAL SESSION...");
+          setTimeout(() => {
+            // Apply pending login sessions
+            if (pendingLoginData) {
+              applyLoginSession(pendingLoginData);
+            } else {
+              // Sandbox quick login fallback
+              localStorage.setItem("user_logged_in", "true");
+              localStorage.setItem("username", email || "demo_institutional@cloud.ex");
+              window.location.href = "/trade";
+            }
+          }, 1500);
+        }
+      }, 200);
+      return () => clearInterval(interval);
+    }
+  }, [selfieStep, pendingLoginData]);
+
+  const applyLoginSession = (data: any) => {
+    localStorage.setItem("user_logged_in", "true");
+    localStorage.setItem("username", data.email || email);
+    localStorage.setItem("user_id", data.userId || "usr-fallback");
+    localStorage.setItem("kyc_tier", data.kycStatus || "Tier-2 Verified (Biometrics Approved)");
+    if (data.balances) {
+      localStorage.setItem("user_asset_balances", JSON.stringify(data.balances.map((b: any) => ({
+        symbol: b.symbol,
+        name: b.symbol === "USDT" ? "Tether USD" : b.symbol === "BTC" ? "Bitcoin" : b.symbol === "ETH" ? "Ethereum" : b.symbol === "SOL" ? "Solana" : "BNB Smart Chain",
+        amount: parseFloat(b.amount),
+        inOrder: parseFloat(b.in_order),
+        color: b.symbol === "USDT" ? "#26A17B" : b.symbol === "BTC" ? "#F7931A" : b.symbol === "ETH" ? "#627EEA" : b.symbol === "SOL" ? "#14F195" : "#F3BA2F"
+      }))));
+    }
+    window.location.href = "/trade";
+  };
 
   const handleContinue = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,16 +117,70 @@ export default function LoginPage() {
     }
   };
 
-  const handleVerifyMfa = (e: React.FormEvent) => {
+  const handleVerifyMfa = async (e: React.FormEvent) => {
     e.preventDefault();
     if (mfaCode.length < 6) {
       setErrorMsg("MFA code must be exactly 6 digits.");
       return;
     }
-    // Set persistent login states
-    localStorage.setItem("user_logged_in", "true");
-    localStorage.setItem("username", email || "institutional_trader@cloud.ex");
-    window.location.href = "/trade";
+    setErrorMsg("");
+
+    try {
+      const fingerprintObj = await generateDeviceFingerprint();
+      const currentHash = fingerprintObj.hash;
+
+      // Check if a different device has logged in or toggle is active
+      const storedHash = localStorage.getItem(`user_device_fingerprint_${email}`);
+      const isNewDevice = simulateDifferentDevice || (storedHash && storedHash !== currentHash);
+
+      const response = await fetch("http://localhost:3002/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Authentication failed");
+      }
+
+      // If new device detected, store pending login session and require selfie liveness
+      if (isNewDevice) {
+        setPendingLoginData(data);
+        localStorage.setItem(`user_device_fingerprint_${email}`, currentHash);
+        setStep("selfie_verification");
+        return;
+      }
+
+      // Save fingerprint if not already set
+      if (!storedHash) {
+        localStorage.setItem(`user_device_fingerprint_${email}`, currentHash);
+      }
+
+      // Normal path (Same device)
+      applyLoginSession(data);
+    } catch (err: any) {
+      console.warn("Database login offline, falling back to sandbox: ", err.message);
+      
+      const fingerprintObj = await generateDeviceFingerprint();
+      const currentHash = fingerprintObj.hash;
+      const storedHash = localStorage.getItem(`user_device_fingerprint_${email}`);
+      const isNewDevice = simulateDifferentDevice || (storedHash && storedHash !== currentHash);
+
+      if (isNewDevice) {
+        localStorage.setItem(`user_device_fingerprint_${email}`, currentHash);
+        setStep("selfie_verification");
+        return;
+      }
+
+      if (!storedHash) {
+        localStorage.setItem(`user_device_fingerprint_${email}`, currentHash);
+      }
+
+      localStorage.setItem("user_logged_in", "true");
+      localStorage.setItem("username", email || "institutional_trader@cloud.ex");
+      window.location.href = "/trade";
+    }
   };
 
   const handleQuickLogin = () => {
@@ -70,7 +210,7 @@ export default function LoginPage() {
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
           <CloudExchangeLogo size={28} />
           <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>
-            Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span>
+            Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
           </span>
         </Link>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -225,10 +365,104 @@ export default function LoginPage() {
                   />
                 </div>
 
+                {/* Simulated device trigger to make it easy for testing */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.03)", padding: 8, borderRadius: 6, border: "1px solid var(--border-light)" }}>
+                  <input 
+                    type="checkbox" 
+                    id="sim-device" 
+                    checked={simulateDifferentDevice}
+                    onChange={e => setSimulateDifferentDevice(e.target.checked)}
+                    style={{ cursor: "pointer" }}
+                  />
+                  <label htmlFor="sim-device" style={{ fontSize: 11, color: "var(--text-secondary)", cursor: "pointer", fontWeight: 600 }}>
+                    Simulate Login from Another Mobile/Device
+                  </label>
+                </div>
+
                 <button type="submit" className="btn-yellow" style={{ width: "100%", padding: "14px", fontSize: 14, fontWeight: 700, borderRadius: 8 }}>
                   Verify & Enter Terminal
                 </button>
               </form>
+            )}
+
+            {step === "selfie_verification" && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, textAlign: "center" }}>
+                <div style={{ marginBottom: 4 }}>
+                  <ShieldCheck size={36} style={{ color: "var(--yellow)", margin: "0 auto 8px" }} />
+                  <h3 style={{ fontSize: 16, fontWeight: 800 }}>New Terminal Security Check</h3>
+                  <p style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+                    New screen resolution signature detected. Face Liveness verification required.
+                  </p>
+                </div>
+
+                {/* Circular scanner overlay */}
+                <div style={{
+                  width: 180,
+                  height: 180,
+                  borderRadius: "50%",
+                  border: selfieStep === "completed" ? "3px solid var(--green)" : selfieStep === "analyzing" ? "3px dashed var(--cyan)" : "3px solid var(--yellow)",
+                  position: "relative",
+                  background: "rgba(0,0,0,0.4)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  overflow: "hidden",
+                  boxShadow: selfieStep === "completed" ? "0 0 25px rgba(0, 230, 118, 0.3)" : "0 0 20px rgba(245, 166, 35, 0.15)"
+                }}>
+                  {/* Glowing Radar Scanning Beam */}
+                  {selfieStep !== "completed" && (
+                    <div style={{
+                      position: "absolute",
+                      top: 0, left: 0, right: 0, bottom: 0,
+                      borderRadius: "50%",
+                      borderTop: "3px solid var(--cyan)",
+                      animation: "spin 2s linear infinite"
+                    }} />
+                  )}
+
+                  {selfieStep === "completed" ? (
+                    <ShieldCheck size={64} style={{ color: "var(--green)", animation: "scaleUp 0.5s ease" }} />
+                  ) : (
+                    <div style={{ position: "relative", width: 100, height: 100, borderRadius: "50%", background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyItems: "center" }}>
+                      <Camera size={36} style={{ margin: "auto", color: selfieStep === "smile" ? "var(--cyan)" : "var(--text-muted)" }} />
+                    </div>
+                  )}
+
+                  {/* Dynamic Face Alignment Guides */}
+                  <div style={{
+                    position: "absolute",
+                    top: "15%", left: "15%", right: "15%", bottom: "15%",
+                    border: "1px dashed rgba(255,255,255,0.2)",
+                    borderRadius: "50%"
+                  }} />
+                </div>
+
+                {/* Status Logs text */}
+                <div style={{ width: "100%" }}>
+                  <div style={{
+                    background: "rgba(0,0,0,0.3)",
+                    border: "1px solid var(--border-light)",
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    fontSize: 11,
+                    fontFamily: "monospace",
+                    color: selfieStep === "completed" ? "var(--green)" : selfieStep === "blink" || selfieStep === "smile" ? "var(--yellow)" : "var(--cyan)",
+                    minHeight: 34,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}>
+                    {selfieLogs}
+                  </div>
+                </div>
+
+                {/* Progress bar for analysis */}
+                {selfieStep === "analyzing" && (
+                  <div style={{ width: "100%", background: "rgba(255,255,255,0.05)", height: 6, borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ width: `${selfieProgress}%`, background: "var(--cyan)", height: "100%", transition: "width 0.2s" }} />
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

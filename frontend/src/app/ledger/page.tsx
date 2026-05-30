@@ -4,6 +4,7 @@ import Link from "next/link";
 import { LogOut, Activity, AlertTriangle, Play, ShieldAlert, Cpu, CheckCircle } from "lucide-react";
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
+import Header from "../components/Header";
 
 interface AuditLog { time: string; debit: string; credit: string; amount: number; coin: string; root: string; status: "VERIFIED" | "MATCHED"; }
 interface WashAlert { id: string; time: string; severity: "INFO" | "WARNING" | "CRITICAL"; msg: string; }
@@ -128,66 +129,19 @@ export default function LedgerAudit() {
       {/* Stars, shooting stars, and moon background */}
       <SpaceBackground />
 
-      {/* HEADER */}
-      <header style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 100,
-        background: "rgba(10, 17, 40, 0.75)",
-        backdropFilter: "blur(12px)",
-        borderBottom: "1px solid var(--border)",
-        height: 64,
-        display: "flex",
-        alignItems: "center",
-        padding: "0 24px",
-        justifyContent: "space-between"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-            <CloudExchangeLogo size={32} />
-            <span style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", letterSpacing: -0.5 }}>
-              Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span>
-            </span>
-          </Link>
-
-          <nav style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <Link href="/" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>Home</Link>
-            <Link href="/coins" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>Coins</Link>
-            <Link href="/trade" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>Trade Terminal</Link>
-            <Link href="/p2p" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>P2P Fiat</Link>
-            <Link href="/kyc" className="btn-ghost" style={{ fontSize: 13, textDecoration: "none", color: "var(--text-primary)" }}>KYC & Wallet</Link>
-            <Link href="/ledger" className="btn-ghost active" style={{ fontSize: 13, textDecoration: "none", color: "var(--yellow)" }}>Ledger Audit</Link>
-          </nav>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {isLoggedIn ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{userEmail}</span>
-              <button onClick={handleLogout} className="btn-outline" style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, cursor: "pointer", borderRadius: 6 }}>
-                <LogOut size={14} /> Log Out
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Link href="/login" style={{ color: "var(--text-primary)", fontWeight: 600, fontSize: 13, padding: "8px 18px", borderRadius: 8, textDecoration: "none", border: "1px solid var(--border)" }}>Log In</Link>
-              <Link href="/register" style={{ background: "var(--yellow)", color: "#000", fontWeight: 700, fontSize: 13, padding: "8px 18px", borderRadius: 8, textDecoration: "none" }}>Sign Up</Link>
-            </div>
-          )}
-        </div>
-      </header>
+      <Header activeTab="ledger" />
 
       {/* BODY */}
       <div className="container-xl" style={{ flex: 1, padding: "40px 24px", display: "flex", flexDirection: "column", gap: 24, zIndex: 10 }}>
         
         {/* Intro header with manual Circuit Breaker control */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="kyc-header-strip">
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
               <span style={{ background: "var(--cyan-dim)", color: "var(--cyan)", padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700 }}>DOUBLE-ENTRY SETTLEMENT</span>
               <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Real-Time Matching Engine Audits</span>
             </div>
-            <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: "-0.01em" }}>Ledger Integrity Telemetry</h1>
+            <h1 className="responsive-h1">Ledger Integrity Telemetry</h1>
           </div>
 
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -226,7 +180,7 @@ export default function LedgerAudit() {
         </div>
 
         {/* Stats boxes */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
+        <div className="grid-responsive-4">
           {[
             { label: "Transactions Ingested", value: ingestedCount.toLocaleString(), color: "var(--cyan)" },
             { label: "Ledger Volume Verified", value: `$${ledgerVolume.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT`, color: "var(--yellow)" },
@@ -241,7 +195,7 @@ export default function LedgerAudit() {
         </div>
 
         {/* Content area: Real-time Ledger Feed (Left) & Wash Trading Detections (Right) */}
-        <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 24, alignItems: "flex-start" }}>
+        <div className="ledger-layout-grid">
           
           {/* LEDGER STREAM */}
           <div style={{ background: "rgba(13, 27, 56, 0.45)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
@@ -252,43 +206,45 @@ export default function LedgerAudit() {
               <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>Refreshed dynamically</span>
             </div>
 
-            <table style={{ width: "100%", fontSize: 11, textAlign: "left", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--border-light)" }}>
-                  <th style={{ padding: "8px 4px" }}>Timestamp</th>
-                  <th>Debit Account</th>
-                  <th>Credit Account</th>
-                  <th>Value Transferred</th>
-                  <th>Merkle Leaf</th>
-                  <th style={{ textAlign: "right" }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {auditLogs.map((log, idx) => (
-                  <tr key={idx} style={{
-                    borderBottom: "1px solid rgba(255,255,255,0.01)",
-                    opacity: isHalted ? 0.6 : 1,
-                    transition: "opacity 0.3s"
-                  }} className="pair-row">
-                    <td style={{ padding: "10px 4px", color: "var(--text-secondary)" }}>{log.time}</td>
-                    <td style={{ color: "var(--text-primary)", fontWeight: 600 }}>{log.debit}</td>
-                    <td style={{ color: "var(--text-primary)", fontWeight: 600 }}>{log.credit}</td>
-                    <td style={{ color: "var(--yellow)", fontWeight: 700 }}>{log.amount} {log.coin}</td>
-                    <td style={{ fontFamily: "monospace", color: "var(--cyan)" }}>{log.root}</td>
-                    <td style={{ textAlign: "right" }}>
-                      <span style={{
-                        fontSize: 9,
-                        fontWeight: 800,
-                        padding: "2px 6px",
-                        borderRadius: 3,
-                        background: log.status === "VERIFIED" ? "var(--green-dim)" : "var(--cyan-dim)",
-                        color: log.status === "VERIFIED" ? "var(--green)" : "var(--cyan)"
-                      }}>{log.status}</span>
-                    </td>
+            <div style={{ overflowX: "auto", width: "100%" }}>
+              <table className="responsive-data-table" style={{ width: "100%", fontSize: 11, textAlign: "left", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--border-light)" }}>
+                    <th style={{ padding: "8px 4px" }}>Timestamp</th>
+                    <th>Debit Account</th>
+                    <th>Credit Account</th>
+                    <th>Value Transferred</th>
+                    <th>Merkle Leaf</th>
+                    <th style={{ textAlign: "right" }}>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {auditLogs.map((log, idx) => (
+                    <tr key={idx} style={{
+                      borderBottom: "1px solid rgba(255,255,255,0.01)",
+                      opacity: isHalted ? 0.6 : 1,
+                      transition: "opacity 0.3s"
+                    }} className="pair-row">
+                      <td style={{ padding: "10px 4px", color: "var(--text-secondary)" }}>{log.time}</td>
+                      <td style={{ color: "var(--text-primary)", fontWeight: 600 }}>{log.debit}</td>
+                      <td style={{ color: "var(--text-primary)", fontWeight: 600 }}>{log.credit}</td>
+                      <td style={{ color: "var(--yellow)", fontWeight: 700 }}>{log.amount} {log.coin}</td>
+                      <td style={{ fontFamily: "monospace", color: "var(--cyan)" }}>{log.root}</td>
+                      <td style={{ textAlign: "right" }}>
+                        <span style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          padding: "2px 6px",
+                          borderRadius: 3,
+                          background: log.status === "VERIFIED" ? "var(--green-dim)" : "var(--cyan-dim)",
+                          color: log.status === "VERIFIED" ? "var(--green)" : "var(--cyan)"
+                        }}>{log.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* WASH TRADING TELEMETRY LOG */}

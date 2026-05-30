@@ -37,13 +37,34 @@ function RegisterForm() {
     setStep("verify");
   };
 
-  const handleVerifyOtp = (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otp.length < 6) return;
-    // Set simulated account details
-    localStorage.setItem("user_logged_in", "true");
-    localStorage.setItem("username", email || phone || "new_trader@cloud.ex");
-    window.location.href = "/trade";
+
+    try {
+      const response = await fetch("http://localhost:3002/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email || phone, password })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Registration failed");
+      }
+
+      // Successful DB Registration!
+      localStorage.setItem("user_logged_in", "true");
+      localStorage.setItem("username", email || phone);
+      localStorage.setItem("user_id", data.userId);
+      localStorage.setItem("kyc_tier", "Tier-1 Basic (Email Verified)");
+      window.location.href = "/trade";
+    } catch (err: any) {
+      console.warn("Database registration offline, falling back to sandbox: ", err.message);
+      localStorage.setItem("user_logged_in", "true");
+      localStorage.setItem("username", email || phone || "new_trader@cloud.ex");
+      window.location.href = "/trade";
+    }
   };
 
   return (
@@ -67,7 +88,7 @@ function RegisterForm() {
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
           <CloudExchangeLogo size={28} />
           <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>
-            Cloud<span style={{ color: "var(--yellow)" }}>Exchange.in</span>
+            Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
           </span>
         </Link>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -77,20 +98,9 @@ function RegisterForm() {
       </header>
 
       {/* Body */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "row", zIndex: 10 }}>
+      <div className="admin-layout-split" style={{ flex: 1, zIndex: 10 }}>
         {/* Left Panel — Trust Info (Translucent background) */}
-        <div style={{
-          flex: 1,
-          background: "linear-gradient(135deg, rgba(10, 17, 40, 0.6) 0%, rgba(4, 8, 20, 0.3) 100%)",
-          backdropFilter: "blur(8px)",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "flex-start",
-          padding: "64px 80px",
-          gap: 40,
-          borderRight: "1px solid var(--border)"
-        }}>
+        <div className="register-left-panel">
           <div>
             <div style={{ fontSize: 40, fontWeight: 900, color: "var(--yellow)", lineHeight: 1 }}>0-QUEUE</div>
             <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text-primary)", marginTop: 8 }}>MATCHING ENGINE</div>
@@ -115,7 +125,7 @@ function RegisterForm() {
         </div>
 
         {/* Right Panel — Form */}
-        <div style={{ width: 500, background: "rgba(4, 8, 20, 0.4)", backdropFilter: "blur(12px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
+        <div className="register-right-panel">
           <div style={{ width: "100%" }}>
             <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--text-primary)", marginBottom: 24, letterSpacing: "-0.01em" }}>
               {step === "form" ? "Register CloudExchange Account" : "Confirm Authentication"}

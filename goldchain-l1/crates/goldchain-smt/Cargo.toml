@@ -1,0 +1,11 @@
+[package]
+name = "goldchain-smt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+goldchain-crypto = { path = "../goldchain-crypto" }
+serde = { version = "1.0", features = ["derive"] }
+borsh = { version = "1.0", features = ["derive"] }
+blake3 = "1.5"
+thiserror = "1.0"

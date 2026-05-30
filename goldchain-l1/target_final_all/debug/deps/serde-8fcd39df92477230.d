@@ -1,0 +1,14 @@
+C:\Users\BUNTY\Desktop\cloud exchange 2\goldchain-l1\target_final_all\debug\deps\serde-8fcd39df92477230.d: C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs C:\Users\BUNTY\Desktop\cloud\ exchange\ 2\goldchain-l1\target_final_all\debug\build\serde-15a02bf4066364b5\out/private.rs
+
+C:\Users\BUNTY\Desktop\cloud exchange 2\goldchain-l1\target_final_all\debug\deps\libserde-8fcd39df92477230.rlib: C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs C:\Users\BUNTY\Desktop\cloud\ exchange\ 2\goldchain-l1\target_final_all\debug\build\serde-15a02bf4066364b5\out/private.rs
+
+C:\Users\BUNTY\Desktop\cloud exchange 2\goldchain-l1\target_final_all\debug\deps\libserde-8fcd39df92477230.rmeta: C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs C:\Users\BUNTY\Desktop\cloud\ exchange\ 2\goldchain-l1\target_final_all\debug\build\serde-15a02bf4066364b5\out/private.rs
+
+C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs:
+C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs:
+C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs:
+C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs:
+C:\Users\BUNTY\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs:
+C:\Users\BUNTY\Desktop\cloud\ exchange\ 2\goldchain-l1\target_final_all\debug\build\serde-15a02bf4066364b5\out/private.rs:
+
+# env-dep:OUT_DIR=C:\\Users\\BUNTY\\Desktop\\cloud exchange 2\\goldchain-l1\\target_final_all\\debug\\build\\serde-15a02bf4066364b5\\out
