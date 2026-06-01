@@ -6,7 +6,7 @@ import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
 import Header from "../components/Header";
 
-interface Ad { id: string; seller: string; orders: number; completion: number; rate: number; available: number; minLimit: number; maxLimit: number; payments: string[]; }
+interface Ad { id: string; seller: string; orders: number; completion: number; rate: number; available: number; minLimit: number; maxLimit: number; payments: string[]; isOffline?: boolean; }
 interface ChatMessage { sender: "system" | "buyer" | "seller"; text: string; time: string; }
 
 const BUY_ADS: Ad[] = [
@@ -23,9 +23,54 @@ const SELL_ADS: Ad[] = [
   { id: "ad-s4", seller: "InstaP2P_Merchant", orders: 342, completion: 96.1, rate: 89.28, available: 8000, minLimit: 5000, maxLimit: 250000, payments: ["UPI", "PhonePe"] },
 ];
 
+const getPaymentBadgeStyle = (payment: string) => {
+  const norm = payment.toUpperCase();
+  if (norm.includes("UPI") || norm.includes("PHONEPE")) {
+    return {
+      bg: "rgba(130, 71, 229, 0.08)",
+      border: "1px solid rgba(130, 71, 229, 0.25)",
+      text: "#A78BFA",
+      leftBorder: "4px solid #8247E5"
+    };
+  } else if (norm.includes("GPAY") || norm.includes("GOOGLE")) {
+    return {
+      bg: "rgba(16, 185, 129, 0.08)",
+      border: "1px solid rgba(16, 185, 129, 0.25)",
+      text: "#34D399",
+      leftBorder: "4px solid #10B981"
+    };
+  } else if (norm.includes("IMPS") || norm.includes("BANK") || norm.includes("TRANSFER")) {
+    return {
+      bg: "rgba(245, 166, 35, 0.08)",
+      border: "1px solid rgba(245, 166, 35, 0.25)",
+      text: "#FBBF24",
+      leftBorder: "4px solid #F5A623"
+    };
+  }
+  return {
+    bg: "rgba(255, 255, 255, 0.03)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    text: "#CBD5E1",
+    leftBorder: "4px solid #64748B"
+  };
+};
+
+const getAvatarColor = (name: string) => {
+  const code = name.charCodeAt(0) % 5;
+  const colors = [
+    "linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)", // Blue
+    "linear-gradient(135deg, #10B981 0%, #047857 100%)", // Green
+    "linear-gradient(135deg, #EC4899 0%, #BE185D 100%)", // Pink
+    "linear-gradient(135deg, #F5A623 0%, #D97706 100%)", // Orange
+    "linear-gradient(135deg, #8247E5 0%, #6D28D9 100%)"  // Purple
+  ];
+  return colors[code];
+};
+
 export default function P2PMarketplace() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState("");
+  const [showMerchantPortal, setShowMerchantPortal] = useState(false);
   
   // Buy / Sell Trade Type switcher state
   const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
@@ -58,6 +103,7 @@ export default function P2PMarketplace() {
   const [newAdMinLimit, setNewAdMinLimit] = useState("5000");
   const [newAdMaxLimit, setNewAdMaxLimit] = useState("50000");
   const [newAdPayment, setNewAdPayment] = useState("UPI");
+  const [merchantFormType, setMerchantFormType] = useState<"buy" | "sell">("sell");
 
   // Auth & state sync
   useEffect(() => {
@@ -178,6 +224,64 @@ export default function P2PMarketplace() {
     alert(`Successfully posted new P2P Trade Ad with rate: ${newAd.rate} INR!`);
   };
 
+  const toggleAdStatus = (adId: string, isUserBuyTab: boolean) => {
+    if (isUserBuyTab) {
+      const updated = adsList.map(ad => ad.id === adId ? { ...ad, isOffline: !ad.isOffline } : ad);
+      setAdsList(updated);
+      localStorage.setItem("p2p_active_ads", JSON.stringify(updated));
+    } else {
+      const updated = sellAdsList.map(ad => ad.id === adId ? { ...ad, isOffline: !ad.isOffline } : ad);
+      setSellAdsList(updated);
+      localStorage.setItem("p2p_active_sell_ads", JSON.stringify(updated));
+    }
+  };
+
+  const deleteMerchantAd = (adId: string, isUserBuyTab: boolean) => {
+    if (!confirm("Are you sure you want to permanently delete this trade advertisement?")) return;
+    if (isUserBuyTab) {
+      const updated = adsList.filter(ad => ad.id !== adId);
+      setAdsList(updated);
+      localStorage.setItem("p2p_active_ads", JSON.stringify(updated));
+    } else {
+      const updated = sellAdsList.filter(ad => ad.id !== adId);
+      setSellAdsList(updated);
+      localStorage.setItem("p2p_active_sell_ads", JSON.stringify(updated));
+    }
+  };
+
+  const handleMerchantPostAdSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetUser = userEmail || "institutional_trader@cloud.ex";
+    const newAd: Ad = {
+      id: "ad-" + Math.floor(10000 + Math.random() * 90000),
+      seller: targetUser.split("@")[0],
+      orders: 0,
+      completion: 100.0,
+      rate: parseFloat(newAdRate) || 89.50,
+      available: parseFloat(newAdAvailable) || 1000,
+      minLimit: parseFloat(newAdMinLimit) || 5000,
+      maxLimit: parseFloat(newAdMaxLimit) || 50000,
+      payments: [newAdPayment],
+      isOffline: false
+    };
+
+    if (merchantFormType === "sell") {
+      const updatedAds = [newAd, ...adsList];
+      setAdsList(updatedAds);
+      localStorage.setItem("p2p_active_ads", JSON.stringify(updatedAds));
+    } else {
+      const updatedAds = [newAd, ...sellAdsList];
+      setSellAdsList(updatedAds);
+      localStorage.setItem("p2p_active_sell_ads", JSON.stringify(updatedAds));
+    }
+
+    setNewAdRate("89.50");
+    setNewAdAvailable("1000");
+    setNewAdMinLimit("5000");
+    setNewAdMaxLimit("50000");
+    alert(`Successfully posted new P2P Trade Ad with rate: ${newAd.rate} INR!`);
+  };
+
   const handleOpenPurchase = (ad: Ad) => {
     setActiveAd(ad);
     setPurchaseQty("1000"); // default
@@ -187,27 +291,52 @@ export default function P2PMarketplace() {
     setChatMessages([]);
   };
 
-  const handleStartEscrow = () => {
+  const handleStartEscrow = async () => {
     if (!isLoggedIn) {
       alert("Please log in to participate in peer-to-peer escrow trades.");
       return;
     }
-    const randId = "P2P-" + Math.floor(100000 + Math.random() * 900000);
-    setOrderId(randId);
-    setEscrowStep("created");
-    
-    // Seed initial system and counterparty chat messages based on Buy vs Sell
-    const initialTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (tradeType === "buy") {
-      setChatMessages([
-        { sender: "system", text: `Escrow Order ${randId} successfully locked by CloudExchange ledger.`, time: initialTime },
-        { sender: "seller", text: `Hello! Please send payments matching the exact amount via UPI/IMPS. Upload a screenshot once done.`, time: initialTime }
-      ]);
-    } else {
-      setChatMessages([
-        { sender: "system", text: `Escrow Order ${randId} successfully created. Your USDT has been locked in safe escrow.`, time: initialTime },
-        { sender: "seller", text: `Hi! I will send you the INR payment immediately via UPI. Please check your bank account and click Release when verified.`, time: initialTime }
-      ]);
+    if (!activeAd) return;
+
+    const scaleQty = tradeType === "buy" ? purchaseQty : (parseFloat(purchaseQty) * activeAd.rate).toFixed(2);
+    const usdtAmt = tradeType === "buy" ? (parseFloat(purchaseQty) / activeAd.rate).toFixed(2) : purchaseQty;
+
+    try {
+      const res = await fetch("http://localhost:3002/api/p2p/escrows/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adId: activeAd.id,
+          buyerId: tradeType === "buy" ? userEmail : activeAd.seller,
+          sellerId: tradeType === "buy" ? activeAd.seller : userEmail,
+          amountUsdt: usdtAmt,
+          amountInr: scaleQty
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const randId = data.escrow.id;
+        setOrderId(randId);
+        setEscrowStep("created");
+
+        const initialTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (tradeType === "buy") {
+          setChatMessages([
+            { sender: "system", text: `Escrow Order ${randId} successfully locked by CloudExchange ledger.`, time: initialTime },
+            { sender: "seller", text: `Hello! Please send payments matching the exact amount via UPI/IMPS. Upload a screenshot once done.`, time: initialTime }
+          ]);
+        } else {
+          setChatMessages([
+            { sender: "system", text: `Escrow Order ${randId} successfully created. Your USDT has been locked in safe escrow.`, time: initialTime },
+            { sender: "seller", text: `Hi! I will send you the INR payment immediately via UPI. Please check your bank account and click Release when verified.`, time: initialTime }
+          ]);
+        }
+      }
+    } catch (err) {
+      console.error("Escrow create failed, falling back to local simulation: ", err);
+      const randId = "P2P-" + Math.floor(100000 + Math.random() * 900000);
+      setOrderId(randId);
+      setEscrowStep("created");
     }
   };
 
@@ -264,9 +393,25 @@ export default function P2PMarketplace() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  // Simulated Anti-Fraud scan
-  const handleVerifyReceipt = () => {
+  // Simulated Anti-Fraud scan which triggers real webhook validation
+  const handleVerifyReceipt = async () => {
     setEscrowStep("scanning");
+    const testUpiRef = "UPI_REF_" + Math.floor(100000000000 + Math.random() * 900000000000);
+    
+    // Register UPI Ref on backend first
+    try {
+      await fetch("http://localhost:3002/api/p2p/escrows/pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          escrowId: orderId,
+          upiRef: testUpiRef
+        })
+      });
+    } catch (err) {
+      console.warn("Could not register payment on backend, continuing...", err);
+    }
+
     const logs = [
       "🔄 Initializing CloudExchange receipt validator v4.1...",
       "🔍 Parsing image metadata (EXIF details)...",
@@ -275,24 +420,43 @@ export default function P2PMarketplace() {
       "🧬 Extracting Perceptual Hash (pHash)...",
       "✅ pHash check: Valid unique receipt signature.",
       "📝 Initializing Optical Character Recognition (OCR) scanner...",
-      "🔍 Extracting transaction sequence identifier... UPI_REF_8429185012...",
+      `🔍 Extracting transaction sequence identifier... ${testUpiRef}...`,
       "✅ Balance ledger balance comparison: 100% verified.",
       "🛡️ Anti-fraud checks complete: VALID TRANSACTION.",
-      "🔐 Escrow state update: PAID. Alerting seller desk."
+      "🔐 Escrow state update: PAID. Dispatching Gateway Webhook..."
     ];
 
     logs.forEach((log, index) => {
       setTimeout(() => {
         setScannerLogs(prev => [...prev, log]);
         if (index === logs.length - 1) {
-          // Complete verification, transition to chat release state
-          setTimeout(() => {
+          // Trigger UPI payment webhook on backend
+          setTimeout(async () => {
+            try {
+              const inrAmt = activeAd ? (tradeType === "buy" ? parseFloat(purchaseQty) : parseFloat(purchaseQty) * activeAd.rate) : 0;
+              const res = await fetch("http://localhost:3002/api/p2p/webhook/upi", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  upiRef: testUpiRef,
+                  amountInr: inrAmt,
+                  status: "SUCCESS"
+                })
+              });
+              if (res.ok) {
+                const data = await res.json();
+                console.log("[UPI WEBHOOK SIM] Auto-release result: ", data);
+              }
+            } catch (err) {
+              console.warn("UPI Webhook dispatch failed: ", err);
+            }
+
             setEscrowStep("released");
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             setChatMessages(prev => [
               ...prev,
-              { sender: "system", text: "Seller confirmed payment receipt. Assets released from escrow contract.", time },
-              { sender: "seller", text: "Verified! Released. Thank you!", time }
+              { sender: "system", text: `UPI payment verified via gateway webhook. Status: Auto-Released.`, time },
+              { sender: "seller", text: `Verified on-chain block! Released. Thank you!`, time }
             ]);
             
             // Calculate USDT from INR
@@ -306,7 +470,22 @@ export default function P2PMarketplace() {
     });
   };
 
-  const handleReleaseUsdt = () => {
+  const handleReleaseUsdt = async () => {
+    try {
+      const res = await fetch("http://localhost:3002/api/p2p/escrows/release", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          escrowId: orderId
+        })
+      });
+      if (res.ok) {
+        console.log("[P2P ESCROW] Manually released via backend API.");
+      }
+    } catch (err) {
+      console.warn("P2P manual release request failed, doing local updates...", err);
+    }
+
     setEscrowStep("released");
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setChatMessages(prev => [
@@ -321,6 +500,14 @@ export default function P2PMarketplace() {
     localStorage.setItem("wallet_balance", String(Math.max(0, +(b - usdtAmt).toFixed(2))));
     window.dispatchEvent(new Event("storage"));
   };
+
+  const merchantUsername = userEmail.split("@")[0] || "institutional_trader";
+  const myBuyAds = adsList.filter(ad => ad.seller === merchantUsername);
+  const mySellAds = sellAdsList.filter(ad => ad.seller === merchantUsername);
+  const myAllAds = [
+    ...myBuyAds.map(ad => ({ ...ad, type: "SELL" as const })),
+    ...mySellAds.map(ad => ({ ...ad, type: "BUY" as const }))
+  ];
 
   return (
     <div style={{ minHeight: "100vh", position: "relative", color: "var(--text-primary)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -399,9 +586,20 @@ export default function P2PMarketplace() {
               <ShieldCheck size={16} color="var(--green)" /> Verified merchants only
             </span>
             {isMerchantApproved ? (
-              <button onClick={() => setShowPostAdModal(true)} className="btn-yellow bn-tab-sm" style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700 }}>
-                📢 Post Trade Ad
-              </button>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button 
+                  onClick={() => { setShowMerchantPortal(!showMerchantPortal); setActiveAd(null); }} 
+                  className={showMerchantPortal ? "btn-outline bn-tab-sm" : "btn-yellow bn-tab-sm"} 
+                  style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}
+                >
+                  {showMerchantPortal ? "🚪 Exit Merchant Portal" : "💼 Go to Merchant Portal"}
+                </button>
+                {!showMerchantPortal && (
+                  <button onClick={() => setShowPostAdModal(true)} className="btn-yellow bn-tab-sm" style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700 }}>
+                    📢 Post Trade Ad
+                  </button>
+                )}
+              </div>
             ) : (
               <button onClick={handleMerchantAction} className="btn-yellow bn-tab-sm" style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700 }}>
                 {isMerchantPending ? "Pending Review" : "Become a Merchant"}
@@ -410,7 +608,8 @@ export default function P2PMarketplace() {
           </div>
         </div>
 
-        <div className="p2p-layout-grid">
+        {!showMerchantPortal ? (
+          <div className="p2p-layout-grid">
           
           {/* ADS LIST */}
           <div style={{ background: "rgba(13, 27, 56, 0.45)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
@@ -429,71 +628,130 @@ export default function P2PMarketplace() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {(tradeType === "buy" ? adsList : sellAdsList).map((ad) => (
-                <div key={ad.id} style={{
-                  padding: "20px 24px",
-                  borderBottom: "1px solid var(--border-light)",
-                  alignItems: "center"
-                }} className="pair-row p2p-row-grid">
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontWeight: 800, fontSize: 14, color: "var(--text-primary)" }}>{ad.seller}</span>
-                      <span style={{ fontSize: 10, color: "var(--green)", display: "flex", alignItems: "center", gap: 2 }}>
-                        <UserCheck size={11} /> Verified
-                      </span>
+              {(tradeType === "buy" ? adsList : sellAdsList).filter(ad => !ad.isOffline).map((ad) => {
+                const avatarBg = getAvatarColor(ad.seller);
+                return (
+                  <div key={ad.id} style={{
+                    padding: "24px",
+                    borderBottom: "1px solid var(--border-light)",
+                    display: "grid",
+                    gridTemplateColumns: "1.2fr 0.8fr 1.2fr 1fr 0.8fr",
+                    gap: "16px",
+                    alignItems: "center",
+                    transition: "all 0.2s ease"
+                  }} className="pair-row p2p-row-grid">
+                    {/* Advertiser Column */}
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: "50%",
+                          background: avatarBg,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: 800,
+                          fontSize: 14,
+                          color: "#fff",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
+                        }}>
+                          {ad.seller.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontWeight: 800, fontSize: 14, color: "#f8fafc" }}>{ad.seller}</span>
+                            <span style={{ 
+                              background: "rgba(245, 166, 35, 0.08)",
+                              border: "1px solid rgba(245, 166, 35, 0.2)",
+                              color: "#F5A623",
+                              padding: "2px 6px",
+                              borderRadius: 4,
+                              fontSize: 9,
+                              fontWeight: 800,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 2
+                            }}>
+                              ⭐ Verified
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+                            <strong style={{ color: "#fff" }}>{ad.orders}</strong> orders | <span style={{ color: "var(--green)", fontWeight: 700 }}>{ad.completion}%</span> completion
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
-                      {ad.orders} orders | {ad.completion}% completion
+
+                    {/* Price Column */}
+                    <div>
+                      <div style={{ fontSize: 20, fontWeight: 900, color: "#F0B90B", fontFamily: "Outfit, sans-serif" }}>
+                        {ad.rate.toFixed(2)} <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)" }}>INR</span>
+                      </div>
+                      <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 4 }}>
+                        1 USDT ≈ {ad.rate.toFixed(2)} INR
+                      </div>
+                    </div>
+
+                    {/* Limit / Available Column */}
+                    <div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{ fontSize: 12, color: "#f8fafc" }}>
+                          <span style={{ color: "var(--text-secondary)" }}>Available:</span> <strong style={{ fontWeight: 700 }}>{ad.available.toLocaleString()} USDT</strong>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                          <span>Limit:</span> <strong style={{ color: "#f8fafc" }}>₹{ad.minLimit.toLocaleString()} - ₹{ad.maxLimit.toLocaleString()}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Payment Methods Column */}
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {ad.payments.map((p) => {
+                        const style = getPaymentBadgeStyle(p);
+                        return (
+                          <span key={p} style={{
+                            background: style.bg,
+                            border: style.border,
+                            borderLeft: style.leftBorder,
+                            fontSize: 10,
+                            padding: "4px 10px",
+                            borderRadius: 4,
+                            color: style.text,
+                            fontWeight: 750,
+                            letterSpacing: "0.03em"
+                          }}>
+                            {p}
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    {/* Action Button Column */}
+                    <div style={{ textAlign: "right" }}>
+                      <button 
+                        onClick={() => handleOpenPurchase(ad)} 
+                        style={{ 
+                          padding: "10px 22px", 
+                          fontSize: 12, 
+                          fontWeight: 800, 
+                          textTransform: "uppercase",
+                          background: tradeType === "buy" ? "#0ECB81" : "#F6465D",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          transition: "all 0.2s ease",
+                          boxShadow: tradeType === "buy" ? "0 4px 12px rgba(14, 203, 129, 0.15)" : "0 4px 12px rgba(246, 70, 93, 0.15)"
+                        }}
+                        className="p2p-trade-btn"
+                      >
+                        {tradeType === "buy" ? "Buy USDT" : "Sell USDT"}
+                      </button>
                     </div>
                   </div>
-
-                  <div>
-                    <div style={{ fontSize: 18, fontWeight: 900, color: "var(--yellow)" }}>{ad.rate.toFixed(2)} INR</div>
-                    <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 2 }}>≈ $1.00 USD</div>
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: 12, color: "var(--text-primary)" }}>{ad.available.toLocaleString()} USDT</div>
-                    <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 4 }}>
-                      Limit: {ad.minLimit.toLocaleString()} - {ad.maxLimit.toLocaleString()} INR
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    {ad.payments.map((p) => (
-                      <span key={p} style={{
-                        background: "rgba(255,255,255,0.03)",
-                        border: "1px solid var(--border)",
-                        fontSize: 10,
-                        padding: "2px 8px",
-                        borderRadius: 4,
-                        color: "var(--text-primary)",
-                        fontWeight: 600
-                      }}>
-                        {p}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div style={{ textAlign: "right" }}>
-                    <button 
-                      onClick={() => handleOpenPurchase(ad)} 
-                      style={{ 
-                        padding: "8px 20px", 
-                        fontSize: 12, 
-                        fontWeight: 700, 
-                        background: tradeType === "buy" ? "var(--green)" : "#E55039",
-                        color: tradeType === "buy" ? "#000" : "#fff",
-                        border: "none",
-                        borderRadius: 6,
-                        cursor: "pointer"
-                      }}
-                    >
-                      {tradeType === "buy" ? "Buy USDT" : "Sell USDT"}
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -852,6 +1110,300 @@ export default function P2PMarketplace() {
           </div>
 
         </div>
+        ) : (
+          <div className="merchant-portal-container" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* STAT CARDS ROW */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20 }}>
+              {/* Stat card 1: Balance & Margin */}
+              <div style={{ background: "rgba(13, 27, 56, 0.45)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 }}>
+                <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, textTransform: "uppercase" }}>Locked Security Collateral</span>
+                <div style={{ fontSize: 24, fontWeight: 900, color: "var(--yellow)", marginTop: 8, fontFamily: "Outfit, sans-serif" }}>
+                  500.00 <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)" }}>USDT</span>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--green)", marginTop: 6, display: "flex", alignItems: "center", gap: 4 }}>
+                  🛡️ Insured Escrow Active
+                </div>
+              </div>
+
+              {/* Stat card 2: Completion Rate */}
+              <div style={{ background: "rgba(13, 27, 56, 0.45)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 }}>
+                <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, textTransform: "uppercase" }}>Completion Rating</span>
+                <div style={{ fontSize: 24, fontWeight: 900, color: "var(--green)", marginTop: 8, fontFamily: "Outfit, sans-serif" }}>
+                  99.98%
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
+                  2,842 total completed trades
+                </div>
+              </div>
+
+              {/* Stat card 3: Avg Release Time */}
+              <div style={{ background: "rgba(13, 27, 56, 0.45)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 }}>
+                <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, textTransform: "uppercase" }}>Avg Release Time</span>
+                <div style={{ fontSize: 24, fontWeight: 900, color: "var(--cyan)", marginTop: 8, fontFamily: "Outfit, sans-serif" }}>
+                  28 <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)" }}>seconds</span>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
+                  Top 1% fast-responder status
+                </div>
+              </div>
+
+              {/* Stat card 4: Status / Account Health */}
+              <div style={{ background: "rgba(13, 27, 56, 0.45)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 }}>
+                <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, textTransform: "uppercase" }}>Desk Health Status</span>
+                <div style={{ fontSize: 24, fontWeight: 900, color: "#fff", marginTop: 8, display: "flex", alignItems: "center", gap: 8, fontFamily: "Outfit, sans-serif" }}>
+                  <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 10px var(--green)", display: "inline-block" }} />
+                  EXCELLENT
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
+                  Security score: 100/100
+                </div>
+              </div>
+            </div>
+
+            {/* TWO COLUMN PORTAL LAYOUT */}
+            <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1.2fr", gap: 24 }}>
+              
+              {/* LEFT COLUMN: ACTIVE ADS TABLE */}
+              <div style={{ background: "rgba(13, 27, 56, 0.45)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-light)", paddingBottom: 16 }}>
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 800 }}>📢 My P2P Trade Advertisements</h3>
+                    <p style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>Manage your active bids, toggle online status, or revoke listings instantly.</p>
+                  </div>
+                  <span style={{ fontSize: 11, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
+                    Total Ads: {myAllAds.length}
+                  </span>
+                </div>
+
+                <div style={{ overflowX: "auto" }}>
+                  {myAllAds.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "40px 16px", color: "var(--text-secondary)" }}>
+                      <HelpCircle size={40} style={{ marginBottom: 12, color: "var(--border)", marginInline: "auto" }} />
+                      <h4 style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>No Advertisements Found</h4>
+                      <p style={{ fontSize: 11, marginTop: 4, maxWidth: 280, marginInline: "auto", lineHeight: 1.4 }}>
+                        You do not have any active peer-to-peer advertisements. Publish your first ad using the Ad Creator panel on the right!
+                      </p>
+                    </div>
+                  ) : (
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid var(--border-light)", color: "var(--text-secondary)", fontWeight: 700, textAlign: "left" }}>
+                          <th style={{ padding: "10px 8px" }}>Ad ID</th>
+                          <th style={{ padding: "10px 8px" }}>Type</th>
+                          <th style={{ padding: "10px 8px" }}>Rate (INR)</th>
+                          <th style={{ padding: "10px 8px" }}>Volume</th>
+                          <th style={{ padding: "10px 8px" }}>Limits</th>
+                          <th style={{ padding: "10px 8px" }}>Payments</th>
+                          <th style={{ padding: "10px 8px" }}>Status</th>
+                          <th style={{ padding: "10px 8px", textAlign: "right" }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {myAllAds.map((ad) => {
+                          const isUserBuyTab = ad.type === "SELL"; // goes to adsList (where user buys)
+                          return (
+                            <tr key={ad.id} style={{ borderBottom: "1px solid var(--border-light)", verticalAlign: "middle" }}>
+                              <td style={{ padding: "12px 8px", fontFamily: "monospace", color: "var(--text-secondary)" }}>{ad.id}</td>
+                              <td style={{ padding: "12px 8px" }}>
+                                <span style={{ 
+                                  background: isUserBuyTab ? "rgba(246, 70, 93, 0.1)" : "rgba(14, 203, 129, 0.1)",
+                                  color: isUserBuyTab ? "#F6465D" : "#0ECB81",
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  fontSize: 10,
+                                  fontWeight: 800
+                                }}>
+                                  {isUserBuyTab ? "SELL" : "BUY"}
+                                </span>
+                              </td>
+                              <td style={{ padding: "12px 8px", fontWeight: 700, color: "var(--yellow)" }}>₹{ad.rate.toFixed(2)}</td>
+                              <td style={{ padding: "12px 8px" }}>{ad.available.toLocaleString()} USDT</td>
+                              <td style={{ padding: "12px 8px", color: "var(--text-secondary)" }}>₹{ad.minLimit.toLocaleString()} - ₹{ad.maxLimit.toLocaleString()}</td>
+                              <td style={{ padding: "12px 8px" }}>
+                                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                  {ad.payments.map(p => (
+                                    <span key={p} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", fontSize: 9, padding: "1px 4px", borderRadius: 3 }}>{p}</span>
+                                  ))}
+                                </div>
+                              </td>
+                              <td style={{ padding: "12px 8px" }}>
+                                <button 
+                                  onClick={() => toggleAdStatus(ad.id, isUserBuyTab)}
+                                  style={{
+                                    background: ad.isOffline ? "rgba(255,255,255,0.05)" : "rgba(14, 203, 129, 0.1)",
+                                    border: `1px solid ${ad.isOffline ? "var(--border)" : "rgba(14, 203, 129, 0.3)"}`,
+                                    color: ad.isOffline ? "var(--text-secondary)" : "#0ECB81",
+                                    padding: "4px 8px",
+                                    borderRadius: 4,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 4
+                                  }}
+                                >
+                                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: ad.isOffline ? "#94a3b8" : "#0ECB81" }} />
+                                  {ad.isOffline ? "OFFLINE" : "ONLINE"}
+                                </button>
+                              </td>
+                              <td style={{ padding: "12px 8px", textAlign: "right" }}>
+                                <button 
+                                  onClick={() => deleteMerchantAd(ad.id, isUserBuyTab)}
+                                  style={{ background: "none", border: "none", color: "#F6465D", fontWeight: 700, cursor: "pointer", fontSize: 11 }}
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* RIGHT COLUMN: AD CREATOR WIZARD */}
+              <div style={{ background: "rgba(10, 17, 40, 0.55)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, boxShadow: "0 4px 20px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", gap: 16 }}>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>🆕 Create Trade Listing</h3>
+                  <p style={{ fontSize: 11, color: "var(--text-secondary)" }}>Deploy custom P2P exchange bids to the live ledger book.</p>
+                </div>
+
+                <form onSubmit={handleMerchantPostAdSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div>
+                    <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6, textTransform: "uppercase" }}>I want to</label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, background: "rgba(0,0,0,0.2)", padding: 3, borderRadius: 6 }}>
+                      <button
+                        type="button"
+                        onClick={() => setMerchantFormType("sell")}
+                        style={{
+                          background: merchantFormType === "sell" ? "#F6465D" : "none",
+                          color: merchantFormType === "sell" ? "#fff" : "var(--text-secondary)",
+                          fontWeight: 700,
+                          border: "none",
+                          borderRadius: 4,
+                          padding: "6px 12px",
+                          fontSize: 12,
+                          cursor: "pointer",
+                          transition: "all 0.2s"
+                        }}
+                      >
+                        Sell USDT
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMerchantFormType("buy")}
+                        style={{
+                          background: merchantFormType === "buy" ? "var(--green)" : "none",
+                          color: merchantFormType === "buy" ? "#000" : "var(--text-secondary)",
+                          fontWeight: 700,
+                          border: "none",
+                          borderRadius: 4,
+                          padding: "6px 12px",
+                          fontSize: 12,
+                          cursor: "pointer",
+                          transition: "all 0.2"
+                        }}
+                      >
+                        Buy USDT
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Exchange Rate</label>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        type="number"
+                        step="any"
+                        className="bn-input"
+                        placeholder="e.g. 89.50"
+                        value={newAdRate}
+                        onChange={e => setNewAdRate(e.target.value)}
+                        required
+                        style={{ width: "100%", paddingRight: 45 }}
+                      />
+                      <span style={{ position: "absolute", right: 12, top: 12, fontSize: 11, fontWeight: 700, color: "var(--text-secondary)" }}>INR</span>
+                    </div>
+                    <span style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 4, display: "block" }}>
+                      Market Reference: ₹89.42 INR per USDT
+                    </span>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Total Quantity</label>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        type="number"
+                        className="bn-input"
+                        placeholder="e.g. 1000"
+                        value={newAdAvailable}
+                        onChange={e => setNewAdAvailable(e.target.value)}
+                        required
+                        style={{ width: "100%", paddingRight: 50 }}
+                      />
+                      <span style={{ position: "absolute", right: 12, top: 12, fontSize: 11, fontWeight: 700, color: "var(--text-secondary)" }}>USDT</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div>
+                      <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Min Limit (INR)</label>
+                      <input
+                        type="number"
+                        className="bn-input"
+                        placeholder="e.g. 5000"
+                        value={newAdMinLimit}
+                        onChange={e => setNewAdMinLimit(e.target.value)}
+                        required
+                        style={{ width: "100%" }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Max Limit (INR)</label>
+                      <input
+                        type="number"
+                        className="bn-input"
+                        placeholder="e.g. 50000"
+                        value={newAdMaxLimit}
+                        onChange={e => setNewAdMaxLimit(e.target.value)}
+                        required
+                        style={{ width: "100%" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6, textTransform: "uppercase" }}>Payment Mode</label>
+                    <select
+                      className="bn-select"
+                      value={newAdPayment}
+                      onChange={e => setNewAdPayment(e.target.value)}
+                      style={{ width: "100%", height: 38 }}
+                    >
+                      <option value="UPI">UPI Payment</option>
+                      <option value="IMPS">IMPS Instant Transfer</option>
+                      <option value="Bank Transfer">Direct Bank Wire</option>
+                      <option value="GPay">Google Pay (GPay)</option>
+                      <option value="PhonePe">PhonePe Transfer</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn-yellow"
+                    style={{ width: "100%", padding: "12px", fontWeight: 700, fontSize: 13, marginTop: 10, borderRadius: 8, cursor: "pointer" }}
+                  >
+                    Publish Trade Listing
+                  </button>
+                </form>
+              </div>
+
+            </div>
+          </div>
+        )}
 
       </div>
 

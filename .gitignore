@@ -38,3 +38,11 @@ yarn-debug.log*
 
 # Rust
 **/target/
+
+# Terraform & SSH Keys
+.terraform/
+*.tfstate
+*.tfstate.*
+*.pem
+devops/terraform/*.pem
+devops/terraform/.terraform/

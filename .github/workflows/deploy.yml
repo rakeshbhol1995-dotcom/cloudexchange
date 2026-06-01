@@ -1,0 +1,59 @@
+name: 🚀 CloudExchange Auto-Deployment (CI/CD)
+
+on:
+  push:
+    branches:
+      - main # Triggers auto-deployment whenever you push code to the 'main' branch
+
+jobs:
+  deploy:
+    name: 🚀 Deploy to AWS EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⚙️ Checkout Code
+        uses: actions/checkout@v3
+
+      - name: 🔐 Executing SSH Deployment Command on AWS
+        uses: appleboy/ssh-action@master
+        with:
+          host: 13.233.16.228
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }} # Secure Private Key stored in GitHub Secrets
+          port: 22
+          script: |
+            set -e
+            APP_DIR="/var/www/cloud-exchange"
+            
+            echo "📥 Navigating to app directory..."
+            cd $APP_DIR
+            
+            # Setup Git repo on server if not initialized
+            if [ ! -d .git ]; then
+              echo "🔄 Initializing Git repo on server..."
+              git init
+              git remote add origin https://github.com/${{ github.repository }}.git
+            fi
+
+            echo "🔄 Pulling latest changes from GitHub..."
+            # Force pull from main branch to overwrite changes
+            git fetch --all
+            git reset --hard origin/main
+            
+            echo "🛠️ Installing Node.js production dependencies..."
+            npm install --production
+            
+            echo "⛓️ Restarting GoldChain L1 Blockchain Nodes (Docker)..."
+            cd $APP_DIR/goldchain-l1/devops
+            sudo ./bootstrap.sh
+            
+            echo "🚀 Restarting Backend API Node Server via PM2..."
+            cd $APP_DIR
+            pm2 delete server || true
+            pm2 start backend/server.ts --interpreter=ts-node --name "server"
+            pm2 save
+            
+            echo "🌐 Restarting Nginx Server..."
+            sudo systemctl restart nginx
+            
+            echo "🎉 SUCCESS! Site has been auto-updated and deployed on cloudexchange.in!"

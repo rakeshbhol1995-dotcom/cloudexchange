@@ -9,6 +9,11 @@ pub mod economics;
 pub mod da;
 pub mod light_client;
 pub mod governance;
+pub mod consensus;
+pub mod vm;
+pub mod p2p;
+pub mod rpc;
+
 
 #[cfg(test)]
 mod tests {
@@ -165,6 +170,30 @@ mod tests {
         assert!(mempool.contains(&tx3.hash()));
         assert!(mempool.contains(&tx2.hash()));
         assert!(!mempool.contains(&tx1.hash())); // Evicted!
+    }
+
+    #[test]
+    fn test_mempool_ttl_expiry() {
+        let mut mempool = Mempool::new(10);
+        let sender_priv = PrivateKey::generate();
+        let sender_addr = Address::from_public_key(&sender_priv.public_key());
+        let receiver_addr = Address::from_public_key(&PrivateKey::generate().public_key());
+
+        // Create transaction with creation_height = 5000, nonce = 1
+        let mut tx = Transaction::new(sender_addr.clone(), receiver_addr.clone(), 100, 1, 10, TxType::Transfer, Vec::new())
+            .with_creation_height(5000);
+        tx.sign(&sender_priv);
+
+        mempool.add_tx(tx.clone()).unwrap();
+        assert_eq!(mempool.len(), 1);
+
+        // Evict at height 5050 => should NOT evict
+        mempool.evict_expired(5050);
+        assert_eq!(mempool.len(), 1);
+
+        // Evict at height 5100 => should evict
+        mempool.evict_expired(5100);
+        assert_eq!(mempool.len(), 0);
     }
 
     #[test]

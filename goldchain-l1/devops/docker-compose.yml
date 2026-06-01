@@ -1,0 +1,38 @@
+# =========================================================================
+# 🐳 GOLDFIELD L1 BLOCKCHAIN MULTI-NODE CONSENSUS MESH ORCHESTRATION
+# =========================================================================
+version: '3.8'
+
+services:
+  # Primary Bootstrap Validator Node 0
+  validator-0:
+    build:
+      context: ..
+      dockerfile: devops/Dockerfile
+    ports:
+      - "8545:8545"
+    command: ["--port", "8545"]
+    restart: always
+    container_name: goldchain-validator-0
+
+  # Replica Consensus Validator Node 1
+  validator-1:
+    build:
+      context: ..
+      dockerfile: devops/Dockerfile
+    ports:
+      - "8546:8545"
+    command: ["--port", "8545"]
+    restart: always
+    container_name: goldchain-validator-1
+
+  # Replica Consensus Validator Node 2
+  validator-2:
+    build:
+      context: ..
+      dockerfile: devops/Dockerfile
+    ports:
+      - "8547:8545"
+    command: ["--port", "8545"]
+    restart: always
+    container_name: goldchain-validator-2

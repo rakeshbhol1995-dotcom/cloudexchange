@@ -25,6 +25,7 @@ pub struct Transaction {
     pub data: Vec<u8>,
     pub signature: Option<Signature>,
     pub crypto_suite: CryptoSuiteId,
+    pub creation_height: u64,
 }
 
 impl Transaction {
@@ -48,7 +49,13 @@ impl Transaction {
             data,
             signature: None,
             crypto_suite: CryptoSuiteId::V1,
+            creation_height: 0,
         }
+    }
+
+    pub fn with_creation_height(mut self, height: u64) -> Self {
+        self.creation_height = height;
+        self
     }
 
     /// Computes the transaction hash (excluding signature) using BLAKE3
@@ -63,6 +70,7 @@ impl Transaction {
             data: self.data.clone(),
             signature: None,
             crypto_suite: self.crypto_suite,
+            creation_height: self.creation_height,
         };
 
         let bytes = borsh::to_vec(&unsigned).expect("Borsh serialization of transaction should succeed");

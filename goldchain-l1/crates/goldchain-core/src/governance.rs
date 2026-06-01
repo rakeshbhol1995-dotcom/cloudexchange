@@ -36,10 +36,14 @@ impl EmergencyRecoveryCommittee {
             )));
         }
 
+        use std::collections::HashSet;
+        let mut seen_members = HashSet::new();
         let mut verified_count = 0;
+
         for (pubkey, sig) in signatures {
-            if self.members.contains(pubkey) {
+            if self.members.contains(pubkey) && !seen_members.contains(pubkey) {
                 if sig.verify(pubkey, proposal_hash.as_ref()).is_ok() {
+                    seen_members.insert(*pubkey);
                     verified_count += 1;
                 }
             }
@@ -107,6 +111,31 @@ mod tests {
 
         // Generate 4 signatures (insufficient quorum)
         assert!(committee.verify_signatures(&proposal_hash, &signatures[0..4]).is_err());
+    }
+
+    #[test]
+    fn test_erc_multisig_deduplication() {
+        let mut members = Vec::new();
+        let mut priv_keys = Vec::new();
+        for _ in 0..7 {
+            let priv_k = PrivateKey::generate();
+            members.push(priv_k.public_key());
+            priv_keys.push(priv_k);
+        }
+
+        let committee = EmergencyRecoveryCommittee::new(members);
+        let proposal_hash = Hash::digest(b"emergency-upgrade-runtime");
+
+        // Generate 1 signature, repeat it 5 times
+        let priv_k = &priv_keys[0];
+        let sig = Signature::sign(priv_k, proposal_hash.as_ref());
+        let mut signatures = Vec::new();
+        for _ in 0..5 {
+            signatures.push((priv_k.public_key(), sig.clone()));
+        }
+
+        // Must fail because public keys are not unique (only 1 unique verified signature)
+        assert!(committee.verify_signatures(&proposal_hash, &signatures).is_err());
     }
 
     #[test]

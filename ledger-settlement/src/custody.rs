@@ -7,8 +7,8 @@ pub trait SigningProvider {
 // Concrete Implementations of SigningProvider
 
 pub struct SelfHostedMPC;
-impl SigningProvider {
-    pub fn new() -> Self { Self }
+impl SelfHostedMPC {
+    pub fn new() -> Self { SelfHostedMPC }
 }
 impl SigningProvider for SelfHostedMPC {
     fn sign_payload(&self, key_id: &str, payload: &[u8]) -> Result<Vec<u8>, String> {
@@ -21,7 +21,7 @@ impl SigningProvider for SelfHostedMPC {
 
 pub struct FireblocksProvider;
 impl FireblocksProvider {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self { FireblocksProvider }
 }
 impl SigningProvider for FireblocksProvider {
     fn sign_payload(&self, key_id: &str, payload: &[u8]) -> Result<Vec<u8>, String> {
@@ -34,7 +34,7 @@ impl SigningProvider for FireblocksProvider {
 
 pub struct CloudHSMProvider;
 impl CloudHSMProvider {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self { CloudHSMProvider }
 }
 impl SigningProvider for CloudHSMProvider {
     fn sign_payload(&self, key_id: &str, payload: &[u8]) -> Result<Vec<u8>, String> {
@@ -47,7 +47,7 @@ impl SigningProvider for CloudHSMProvider {
 
 pub struct YubiHSMProvider;
 impl YubiHSMProvider {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self { YubiHSMProvider }
 }
 impl SigningProvider for YubiHSMProvider {
     fn sign_payload(&self, key_id: &str, payload: &[u8]) -> Result<Vec<u8>, String> {
@@ -60,7 +60,7 @@ impl SigningProvider for YubiHSMProvider {
 
 pub struct ThalesProvider;
 impl ThalesProvider {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self { ThalesProvider }
 }
 impl SigningProvider for ThalesProvider {
     fn sign_payload(&self, key_id: &str, payload: &[u8]) -> Result<Vec<u8>, String> {

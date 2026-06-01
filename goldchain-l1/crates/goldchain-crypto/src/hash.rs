@@ -6,12 +6,18 @@ use borsh::{BorshSerialize, BorshDeserialize};
 pub struct Hash(pub [u8; 32]);
 
 impl Hash {
-    /// Computes the BLAKE3 hash of the given data
-    pub fn digest(data: &[u8]) -> Self {
+    /// Computes the BLAKE3 hash of the given data with a domain separation tag to prevent cross-context hash collisions
+    pub fn digest_with_domain(domain_tag: &str, data: &[u8]) -> Self {
         let mut hasher = blake3::Hasher::new();
+        hasher.update(domain_tag.as_bytes());
         hasher.update(data);
         let result = hasher.finalize();
         Hash(*result.as_bytes())
+    }
+
+    /// Computes the BLAKE3 hash of the given data using the default consensus separation domain
+    pub fn digest(data: &[u8]) -> Self {
+        Self::digest_with_domain("GOLDCHAIN_CONSENSUS_DEFAULT_V1", data)
     }
 
     /// Creates a hash from a 32-byte array

@@ -125,6 +125,11 @@ fn main() {
         if let Some(ob) = orderbooks.get_mut(symbol) {
             let _trades = ob.process_event(event.clone());
             
+            // Wire high-frequency orderbook matches to live L1 JSON-RPC settlement
+            if i % 10000 == 0 {
+                dispatch_l1_settlement("gold1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4rshq", "gold1address2", 1000 * 1_000_000_000, price);
+            }
+
             let t_elapsed = t0.elapsed();
             if i % 10000 == 0 {
                 match_latencies.push(t_elapsed.as_nanos());
@@ -167,4 +172,33 @@ fn main() {
     // Shut down shadow thread cleanly
     drop(shadow_tx);
     let _ = shadow_handle.join();
+}
+
+/// Dispatches a high-performance, standard-library-only JSON-RPC settlement transaction to L1
+fn dispatch_l1_settlement(buyer: &str, seller: &str, amount: u64, price: u64) {
+    use std::io::Write;
+    use std::net::TcpStream;
+
+    let rpc_payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "gold_sendRawTransaction",
+        "params": [format!("settle:from_{}:to_{}:amt_{}:price_{}", buyer, seller, amount, price)],
+        "id": 99
+    });
+
+    let body = rpc_payload.to_string();
+    let http_request = format!(
+        "POST / HTTP/1.1\r\n\
+         Host: localhost:8545\r\n\
+         Content-Type: application/json\r\n\
+         Content-Length: {}\r\n\
+         Connection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+
+    if let Ok(mut stream) = TcpStream::connect("127.0.0.1:8545") {
+        let _ = stream.write_all(http_request.as_bytes());
+        let _ = stream.flush();
+    }
 }

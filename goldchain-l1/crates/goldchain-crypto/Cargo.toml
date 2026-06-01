@@ -11,4 +11,6 @@ rand = "0.8.5"
 serde = { version = "1.0", features = ["derive"] }
 borsh = { version = "1.0", features = ["derive"] }
 thiserror = "1.0"
+bls12_381 = "0.8.0"
+
 

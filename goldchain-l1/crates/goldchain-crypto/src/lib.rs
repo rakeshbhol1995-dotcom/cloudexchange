@@ -54,5 +54,36 @@ mod tests {
         let tampered_sig = Signature::from_bytes(&tampered_bytes).unwrap();
         assert!(tampered_sig.verify(&pub_key, message).is_err());
     }
+
+    #[test]
+    fn test_poly256_lattice_multiplication() {
+        use super::signature::Poly256;
+        let mut p1 = Poly256::zero();
+        p1.coeffs[0] = 5;
+        p1.coeffs[1] = 10;
+
+        let mut p2 = Poly256::zero();
+        p2.coeffs[0] = 2;
+
+        let p3 = p1.mul(&p2);
+        assert_eq!(p3.coeffs[0], 10);
+        assert_eq!(p3.coeffs[1], 20);
+    }
+
+    #[test]
+    fn test_pairing_bilinear_groups() {
+        use super::signature::{G1Point, G2Point, pairing};
+        let p = G1Point::from_scalar(3);
+        let q = G2Point::from_scalar(4);
+        
+        let p_agg = p.mul(2); // 2 * P
+        let q_agg = q.mul(2); // 2 * Q
+
+        // Test bilinear identity: e(2 * P, Q) == e(P, 2 * Q)
+        let e1 = pairing(p_agg, q);
+        let e2 = pairing(p, q_agg);
+
+        assert_eq!(e1, e2);
+    }
 }
 

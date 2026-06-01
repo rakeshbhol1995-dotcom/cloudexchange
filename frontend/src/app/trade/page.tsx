@@ -94,6 +94,7 @@ function generateCandles(basePrice: number, count: number, tf: string): Candle[]
 }
 
 const BASE_COINS = [
+  { symbol: "GOLD", price: 75.00, change: 4.85, vol: "42.5M" },
   { symbol: "BTC", price: 65050, change: 2.45, vol: "12.8B" },
   { symbol: "ETH", price: 3420,  change: -1.2, vol: "4.2B" },
   { symbol: "BNB", price: 641,   change: 0.85, vol: "890M" },

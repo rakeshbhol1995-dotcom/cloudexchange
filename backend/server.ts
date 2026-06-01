@@ -4,6 +4,42 @@ import { WebSocketServer, WebSocket } from "ws";
 import cors from "cors";
 import { Pool } from "pg";
 import crypto from "crypto";
+import nodemailer from "nodemailer";
+import fs from "fs";
+import path from "path";
+
+// Native .env file loader for zero-dependency local configuration
+try {
+  const envPath = path.join(__dirname, "../.env");
+  if (fs.existsSync(envPath)) {
+    const envConfig = fs.readFileSync(envPath, "utf-8");
+    envConfig.split("\n").forEach((line) => {
+      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+      if (match) {
+        const key = match[1];
+        let value = match[2] || "";
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        } else if (value.startsWith("'") && value.endsWith("'")) {
+          value = value.slice(1, -1);
+        }
+        process.env[key] = value.trim();
+      }
+    });
+    console.log("[ENV] Successfully loaded local configuration from .env");
+  }
+} catch (err) {
+  console.warn("[ENV] Optional .env loader encountered a warning: ", err);
+}
+
+// In-Memory Security OTP Cache
+interface OtpEntry {
+  emailCode?: string;
+  smsCode?: string;
+  expiresAt: number;
+}
+const otpCache: Record<string, OtpEntry> = {};
+
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -78,6 +114,18 @@ const initializeDatabase = async () => {
           status VARCHAR(20) DEFAULT 'PENDING',
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS p2p_escrows (
+          id VARCHAR(50) PRIMARY KEY,
+          ad_id VARCHAR(50) NOT NULL,
+          buyer_id VARCHAR(255) NOT NULL,
+          seller_id VARCHAR(255) NOT NULL,
+          amount_usdt NUMERIC(36, 18) NOT NULL,
+          amount_inr NUMERIC(36, 18) NOT NULL,
+          state VARCHAR(20) DEFAULT 'CREATED',
+          upi_ref VARCHAR(100),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
     `);
     console.log("[DATABASE] Table schemas verified/migrated.");
     client.release();
@@ -93,6 +141,19 @@ initializeDatabase();
 const memoryUsers: any[] = [];
 const memoryBalances: Record<string, any[]> = {};
 const memoryOrders: any[] = [];
+
+interface P2PEscrow {
+  id: string;
+  adId: string;
+  buyerId: string;
+  sellerId: string;
+  amountUsdt: number;
+  amountInr: number;
+  state: "CREATED" | "PAID" | "RELEASED" | "DISPUTED";
+  upiRef?: string;
+  createdAt: string;
+}
+const memoryP2PEscrows: P2PEscrow[] = [];
 
 const p2pAds: any[] = [
   { id: "ad-1", seller: "TitanOTC", orders: 1845, completion: 99.2, rate: 89.42, available: 15400, minLimit: 10000, maxLimit: 500000, payments: ["UPI", "IMPS"] },
@@ -116,6 +177,16 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString(),
     matchingEngine: "active"
   });
+});
+
+// Admin Authentication Login
+app.post("/api/admin/auth/login", (req, res) => {
+  const { password, totp } = req.body;
+  if (password === "exchange_admin_2026" && totp === "125983") {
+    return res.json({ success: true, token: "admin-jwt-token-2026-supersecret" });
+  } else {
+    return res.status(401).json({ error: "Invalid admin password or TOTP security key." });
+  }
 });
 
 // Authentication: Register
@@ -320,6 +391,386 @@ app.post("/api/p2p/post-ad", (req, res) => {
   };
   p2pAds.unshift(newAd);
   res.json({ success: true, ad: newAd });
+});
+
+// ----------------------------------------------------
+// Security OTP Integration (SMS & Email OTPs)
+// ----------------------------------------------------
+app.post("/api/security/send-email-otp", async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email address is required." });
+  }
+
+  // Generate 6-digit random code
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5-minute expiry
+
+  // Store in cache
+  if (!otpCache[email]) {
+    otpCache[email] = { expiresAt };
+  }
+  otpCache[email].emailCode = code;
+  otpCache[email].expiresAt = expiresAt;
+
+  console.log(`[SECURITY EMAIL OTP] Generated ${code} for ${email}`);
+
+  // Transporter config - Fallback to mock nodemailer transporter if SMTP credentials are missing
+  const host = process.env.EMAIL_HOST || "smtp.gmail.com";
+  const port = parseInt(process.env.EMAIL_PORT || "587");
+  const user = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASSWORD;
+
+  if (user && pass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465,
+        auth: { user, pass }
+      });
+
+      await transporter.sendMail({
+        from: '"CloudExchange Security" <no-reply@cloudexchange.in>',
+        to: email,
+        subject: "🔒 Security Verification Code",
+        html: `
+          <div style="font-family: Arial, sans-serif; background: #060913; color: #f8fafc; padding: 30px; border-radius: 12px; border: 1px solid rgba(245, 166, 35, 0.15); max-width: 500px;">
+            <h2 style="color: #f5a623; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 10px;">CloudExchange Secure Verification</h2>
+            <p>Your one-time security authentication OTP is:</p>
+            <div style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #00f0ff; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0; border: 1px dashed rgba(0,240,255,0.3);">${code}</div>
+            <p style="font-size: 12px; color: #94a3b8;">This code is valid for 5 minutes. If you did not request this code, please ignore this email.</p>
+          </div>
+        `
+      });
+      console.log(`[SECURITY EMAIL OTP] Sent to ${email} via SMTP.`);
+      return res.json({ success: true, message: "Verification OTP sent to your email." });
+    } catch (err) {
+      console.error("[SECURITY EMAIL OTP ERROR] SMTP delivery failed, falling back to mock: ", err);
+    }
+  }
+
+  // Sandbox/Mock success response
+  return res.json({ 
+    success: true, 
+    message: "Verification OTP dispatched (Sandbox Mock). Check node logs.",
+    sandbox: true,
+    code 
+  });
+});
+
+app.post("/api/security/send-sms-otp", async (req, res) => {
+  const { email, phoneNumber } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email/User identification is required." });
+  }
+
+  // Generate 6-digit random code
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5-minute expiry
+
+  // Store in cache
+  if (!otpCache[email]) {
+    otpCache[email] = { expiresAt };
+  }
+  otpCache[email].smsCode = code;
+  otpCache[email].expiresAt = expiresAt;
+
+  console.log(`[SECURITY SMS OTP] Generated ${code} for mobile associated with ${email}`);
+
+  // Integrate Fast2SMS / MSG91 API if API key is present in environment
+  const smsApiKey = process.env.SMS_API_KEY;
+  if (smsApiKey && phoneNumber) {
+    try {
+      // Clean up phone number
+      const cleanPhone = phoneNumber.replace(/\D/g, "");
+      // Fast2SMS API integration example:
+      const response = await fetch(`https://www.fast2sms.com/dev/bulkV2?authorization=${smsApiKey}&variables_values=${code}&route=otp&numbers=${cleanPhone}`);
+      const data = await response.json();
+      console.log(`[SECURITY SMS OTP] Fast2SMS dispatch result:`, data);
+      return res.json({ success: true, message: "Verification OTP sent to your phone via SMS." });
+    } catch (err) {
+      console.error("[SECURITY SMS OTP ERROR] Fast2SMS API call failed, falling back to mock: ", err);
+    }
+  }
+
+  return res.json({ 
+    success: true, 
+    message: "Verification OTP dispatched (Sandbox Mock). Check node logs.",
+    sandbox: true,
+    code 
+  });
+});
+
+app.post("/api/security/verify-otp", (req, res) => {
+  const { email, emailCode, smsCode } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email/User identification is required." });
+  }
+
+  const cached = otpCache[email];
+  if (!cached) {
+    return res.status(400).json({ error: "No active verification codes found for this session." });
+  }
+
+  if (Date.now() > cached.expiresAt) {
+    delete otpCache[email];
+    return res.status(400).json({ error: "Verification codes have expired. Please request new ones." });
+  }
+
+  if (emailCode && cached.emailCode && emailCode !== cached.emailCode) {
+    return res.status(400).json({ error: "Invalid email verification code." });
+  }
+
+  if (smsCode && cached.smsCode && smsCode !== cached.smsCode) {
+    return res.status(400).json({ error: "Invalid mobile SMS verification code." });
+  }
+
+  // Clean cache on success
+  delete otpCache[email];
+  return res.json({ success: true, message: "Verification check succeeded!" });
+});
+
+// ----------------------------------------------------
+// P2P Escrow & UPI Webhook Integration
+// ----------------------------------------------------
+import http from "http";
+
+function dispatchL1Settlement(buyer: string, seller: string, amount: number, price: number) {
+  const payload = JSON.stringify({
+    jsonrpc: "2.0",
+    method: "gold_sendRawTransaction",
+    params: [`settle:p2p_from_${seller.replace(/[^a-zA-Z0-9]/g, "")}_to_${buyer.replace(/[^a-zA-Z0-9]/g, "")}_amt_${Math.round(amount * 1_000_000_000)}_price_${Math.round(price)}`],
+    id: 101
+  });
+
+  const options = {
+    hostname: "127.0.0.1",
+    port: 8545,
+    path: "/",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(payload)
+    }
+  };
+
+  const req = http.request(options, (res) => {
+    let data = "";
+    res.on("data", (chunk) => { data += chunk; });
+    res.on("end", () => {
+      console.log(`[L1 SETTLEMENT] Response: ${data}`);
+    });
+  });
+
+  req.on("error", (e) => {
+    console.warn(`[L1 SETTLEMENT WARNING] L1 Node offline, bypassing live settle broadcast: ${e.message}`);
+  });
+
+  req.write(payload);
+  req.end();
+}
+
+app.get("/api/p2p/escrows/list", async (req, res) => {
+  if (pool && isDbConnected) {
+    try {
+      const result = await pool.query("SELECT id, ad_id as \"adId\", buyer_id as \"buyerId\", seller_id as \"sellerId\", amount_usdt as \"amountUsdt\", amount_inr as \"amountInr\", state, upi_ref as \"upiRef\", created_at as \"createdAt\" FROM p2p_escrows ORDER BY created_at DESC");
+      return res.json({ success: true, escrows: result.rows });
+    } catch (err) {
+      return res.status(500).json({ error: "Could not fetch escrows from PostgreSQL." });
+    }
+  } else {
+    return res.json({ success: true, escrows: memoryP2PEscrows });
+  }
+});
+
+app.post("/api/p2p/escrows/create", async (req, res) => {
+  const { adId, buyerId, sellerId, amountUsdt, amountInr } = req.body;
+  if (!adId || !buyerId || !sellerId || !amountUsdt || !amountInr) {
+    return res.status(400).json({ error: "Missing required escrow fields." });
+  }
+
+  const escrowId = "P2P-" + Math.floor(100000 + Math.random() * 900000);
+  const newEscrow: P2PEscrow = {
+    id: escrowId,
+    adId,
+    buyerId,
+    sellerId,
+    amountUsdt: parseFloat(amountUsdt),
+    amountInr: parseFloat(amountInr),
+    state: "CREATED",
+    createdAt: new Date().toISOString()
+  };
+
+  // Lock USDT from seller
+  if (pool && isDbConnected) {
+    try {
+      const sellerRes = await pool.query("SELECT id FROM users WHERE email = $1 OR id::text = $1", [sellerId]);
+      if (sellerRes.rows.length > 0) {
+        const sId = sellerRes.rows[0].id;
+        await pool.query("UPDATE balances SET amount = amount - $1 WHERE user_id = $2 AND symbol = 'USDT'", [amountUsdt, sId]);
+      }
+      
+      await pool.query(
+        "INSERT INTO p2p_escrows (id, ad_id, buyer_id, seller_id, amount_usdt, amount_inr, state) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        [escrowId, adId, buyerId, sellerId, amountUsdt, amountInr, "CREATED"]
+      );
+    } catch (err) {
+      console.error("[ESCROW CREATE ERROR] ", err);
+    }
+  } else {
+    console.log(`[P2P ESCROW MEMORY] Locked ${amountUsdt} USDT from seller '${sellerId}' for order ${escrowId}`);
+  }
+
+  memoryP2PEscrows.unshift(newEscrow);
+  res.json({ success: true, escrow: newEscrow });
+});
+
+app.post("/api/p2p/escrows/pay", async (req, res) => {
+  const { escrowId, upiRef } = req.body;
+  if (!escrowId || !upiRef) {
+    return res.status(400).json({ error: "Missing escrowId or upiRef payload." });
+  }
+
+  if (pool && isDbConnected) {
+    try {
+      await pool.query(
+        "UPDATE p2p_escrows SET state = 'PAID', upi_ref = $1 WHERE id = $2",
+        [upiRef, escrowId]
+      );
+    } catch (err) {
+      console.error("[ESCROW PAY ERROR] ", err);
+    }
+  }
+
+  const escrow = memoryP2PEscrows.find(e => e.id === escrowId);
+  if (escrow) {
+    escrow.state = "PAID";
+    escrow.upiRef = upiRef;
+  }
+
+  console.log(`[P2P ESCROW] Order ${escrowId} marked as PAID. Reference: ${upiRef}`);
+  res.json({ success: true, message: "Escrow marked as paid.", escrow });
+});
+
+app.post("/api/p2p/escrows/release", async (req, res) => {
+  const { escrowId } = req.body;
+  if (!escrowId) {
+    return res.status(400).json({ error: "Missing escrowId parameter." });
+  }
+
+  let escrow: P2PEscrow | undefined;
+  
+  if (pool && isDbConnected) {
+    try {
+      const result = await pool.query("SELECT id, ad_id as \"adId\", buyer_id as \"buyerId\", seller_id as \"sellerId\", amount_usdt as \"amountUsdt\", amount_inr as \"amountInr\", state, upi_ref as \"upiRef\" FROM p2p_escrows WHERE id = $1", [escrowId]);
+      if (result.rows.length > 0) {
+        escrow = result.rows[0];
+        if (escrow.state !== "RELEASED") {
+          await pool.query("UPDATE p2p_escrows SET state = 'RELEASED' WHERE id = $1", [escrowId]);
+          
+          const buyerRes = await pool.query("SELECT id FROM users WHERE email = $1 OR id::text = $1", [escrow.buyerId]);
+          if (buyerRes.rows.length > 0) {
+            const bId = buyerRes.rows[0].id;
+            await pool.query("INSERT INTO balances (user_id, symbol, amount) VALUES ($1, 'USDT', $2) ON CONFLICT (user_id, symbol) DO UPDATE SET amount = balances.amount + $2", [bId, escrow.amountUsdt]);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[ESCROW RELEASE ERROR] ", err);
+    }
+  } else {
+    escrow = memoryP2PEscrows.find(e => e.id === escrowId);
+    if (escrow && escrow.state !== "RELEASED") {
+      escrow.state = "RELEASED";
+    }
+  }
+
+  if (escrow) {
+    console.log(`[P2P ESCROW] Releasing escrow ${escrowId}: ${escrow.amountUsdt} USDT transferred to buyer ${escrow.buyerId}`);
+    dispatchL1Settlement(escrow.buyerId, escrow.sellerId, escrow.amountUsdt, escrow.amountInr / escrow.amountUsdt);
+    return res.json({ success: true, message: "Escrow successfully released to buyer.", escrow });
+  } else {
+    return res.status(404).json({ error: "Escrow order not found." });
+  }
+});
+
+app.post("/api/p2p/webhook/upi", async (req, res) => {
+  const { upiRef, amountInr, status } = req.body;
+  if (!upiRef || !amountInr) {
+    return res.status(400).json({ error: "Missing upiRef or amountInr in webhook payload." });
+  }
+
+  console.log(`[UPI WEBHOOK RECEIVED] Processing reference: ${upiRef}, Amount: ₹${amountInr}, Status: ${status || 'SUCCESS'}`);
+
+  let escrow: P2PEscrow | undefined;
+
+  if (pool && isDbConnected) {
+    try {
+      const result = await pool.query(
+        "SELECT id, ad_id as \"adId\", buyer_id as \"buyerId\", seller_id as \"sellerId\", amount_usdt as \"amountUsdt\", amount_inr as \"amountInr\", state FROM p2p_escrows WHERE upi_ref = $1 OR id = $1", 
+        [upiRef]
+      );
+      if (result.rows.length > 0) {
+        escrow = result.rows[0];
+      }
+    } catch (err) {
+      console.error("[WEBHOOK DB FETCH ERROR] ", err);
+    }
+  } else {
+    escrow = memoryP2PEscrows.find(e => e.upiRef === upiRef || e.id === upiRef);
+  }
+
+  if (!escrow) {
+    if (pool && isDbConnected) {
+      try {
+        const result = await pool.query(
+          "SELECT id, ad_id as \"adId\", buyer_id as \"buyerId\", seller_id as \"sellerId\", amount_usdt as \"amountUsdt\", amount_inr as \"amountInr\", state FROM p2p_escrows WHERE state = 'CREATED' AND amount_inr = $1 LIMIT 1",
+          [amountInr]
+        );
+        if (result.rows.length > 0) {
+          escrow = result.rows[0];
+        }
+      } catch (err) {}
+    } else {
+      escrow = memoryP2PEscrows.find(e => e.state === "CREATED" && e.amountInr === parseFloat(amountInr));
+    }
+  }
+
+  if (escrow) {
+    const escrowId = escrow.id;
+
+    if (pool && isDbConnected) {
+      try {
+        await pool.query("UPDATE p2p_escrows SET state = 'RELEASED', upi_ref = $1 WHERE id = $2", [upiRef, escrowId]);
+        const buyerRes = await pool.query("SELECT id FROM users WHERE email = $1 OR id::text = $1", [escrow.buyerId]);
+        if (buyerRes.rows.length > 0) {
+          const bId = buyerRes.rows[0].id;
+          await pool.query("INSERT INTO balances (user_id, symbol, amount) VALUES ($1, 'USDT', $2) ON CONFLICT (user_id, symbol) DO UPDATE SET amount = balances.amount + $2", [bId, escrow.amountUsdt]);
+        }
+      } catch (err) {}
+    } else {
+      const memEscrow = memoryP2PEscrows.find(e => e.id === escrowId);
+      if (memEscrow) {
+        memEscrow.state = "RELEASED";
+        memEscrow.upiRef = upiRef;
+      }
+      escrow.state = "RELEASED";
+      escrow.upiRef = upiRef;
+    }
+
+    console.log(`[UPI WEBHOOK AUTO-RELEASE] Escrow ${escrowId} matching reference ${upiRef} auto-released!`);
+    dispatchL1Settlement(escrow.buyerId, escrow.sellerId, escrow.amountUsdt, escrow.amountInr / escrow.amountUsdt);
+
+    return res.json({ 
+      success: true, 
+      message: "UPI Transaction verified. Escrow auto-released.", 
+      escrowId,
+      released: true 
+    });
+  } else {
+    return res.status(404).json({ error: "No matching pending escrow found for this payment notification." });
+  }
 });
 
 // HFT Order Matching Engine Logic

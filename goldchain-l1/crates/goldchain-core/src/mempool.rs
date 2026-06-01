@@ -8,6 +8,8 @@ pub struct Mempool {
     pub transactions: HashMap<Hash, Transaction>,
     // Tracks maximum mempool size to prevent DDoS
     pub capacity: usize,
+    // Per-sender transaction limit (spammer protection)
+    pub max_txs_per_sender: usize,
 }
 
 impl Mempool {
@@ -16,6 +18,7 @@ impl Mempool {
         Mempool {
             transactions: HashMap::new(),
             capacity,
+            max_txs_per_sender: 16,
         }
     }
 
@@ -29,7 +32,18 @@ impl Mempool {
             return Err(CoreError::InvalidTransaction("Transaction already in mempool".to_string()));
         }
 
-        // 1. Check Replace-By-Fee (RBF): same sender and same nonce
+        // 1. Enforce per-sender transaction limit (max 16 txs) to prevent Sybil/spam attacks
+        let sender_tx_count = self.transactions.values()
+            .filter(|existing_tx| existing_tx.from == tx.from)
+            .count();
+        if sender_tx_count >= self.max_txs_per_sender {
+            return Err(CoreError::InvalidTransaction(format!(
+                "Mempool spam protection: Sender exceeds maximum limit of {} pending transactions",
+                self.max_txs_per_sender
+            )));
+        }
+
+        // 2. Check Replace-By-Fee (RBF): same sender and same nonce
         let mut rbf_target = None;
         for (hash, existing_tx) in &self.transactions {
             if existing_tx.from == tx.from && existing_tx.nonce == tx.nonce {
@@ -50,7 +64,7 @@ impl Mempool {
             return Ok(());
         }
 
-        // 2. Check Eviction if mempool is at capacity
+        // 3. Check Eviction if mempool is at capacity
         if self.transactions.len() >= self.capacity {
             // Find lowest fee transaction
             let lowest_tx = self.transactions.iter()
@@ -72,6 +86,19 @@ impl Mempool {
 
         self.transactions.insert(tx_hash, tx);
         Ok(())
+    }
+
+    /// Evicts expired transactions from the mempool (simulated age limit of 100 block/ticks)
+    pub fn evict_expired(&mut self, current_height: u64) {
+        let max_expiry_blocks = 100u64;
+        self.transactions.retain(|_, tx| {
+            // Decoupled from account nonce: uses creation_height specifically for TTL tracking
+            if current_height >= tx.creation_height + max_expiry_blocks {
+                false // Evicted!
+            } else {
+                true  // Retained
+            }
+        });
     }
 
     /// Retrieves up to `limit` transactions sorted by highest fee
@@ -106,3 +133,4 @@ impl Mempool {
         self.transactions.contains_key(hash)
     }
 }
+
