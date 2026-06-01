@@ -4,7 +4,7 @@
 # Designed to build and deploy to AWS EC2: 13.233.16.228 in Mumbai
 
 $ErrorActionPreference = "Stop"
-$IP = "13.233.16.228"
+$IP = "43.205.232.106"
 $PEM_PATH = "devops/terraform/cloudexchange-key.pem"
 $REMOTE_DIR = "/var/www/cloud-exchange"
 
