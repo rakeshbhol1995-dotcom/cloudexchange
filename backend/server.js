@@ -751,6 +751,7 @@ app.post("/api/security/send-email-otp", async (req, res) => {
   const port = parseInt(process.env.EMAIL_PORT || "587");
   const user = process.env.EMAIL_USER;
   const pass = process.env.EMAIL_PASSWORD;
+  const sender = process.env.EMAIL_SENDER || "no-reply@cloudexchange.in";
   if (!user || !pass) {
     return res.status(500).json({ error: "SMTP Email Server credentials are not configured on the platform." });
   }
@@ -762,7 +763,7 @@ app.post("/api/security/send-email-otp", async (req, res) => {
       auth: { user, pass }
     });
     await transporter.sendMail({
-      from: '"CloudExchange Security" <no-reply@cloudexchange.in>',
+      from: `"CloudExchange Security" <${sender}>`,
       to: email,
       subject: "\u{1F512} Security Verification Code",
       html: `
@@ -774,7 +775,7 @@ app.post("/api/security/send-email-otp", async (req, res) => {
         </div>
       `
     });
-    console.log(`[SECURITY EMAIL OTP] Sent to ${email} via SMTP.`);
+    console.log(`[SECURITY EMAIL OTP] Sent to ${email} via SMTP from ${sender}.`);
     return res.json({ success: true, message: "Verification OTP sent to your email." });
   } catch (err) {
     console.error("[SECURITY EMAIL OTP ERROR] SMTP delivery failed: ", err);
@@ -809,7 +810,8 @@ app.post("/api/security/send-sms-otp", async (req, res) => {
       cleanPhone = cleanPhone.substring(1);
     }
     console.log(`[SECURITY SMS OTP] Sending OTP to cleaned mobile number: ${cleanPhone}`);
-    const response = await fetch(`https://www.fast2sms.com/dev/bulkV2?authorization=${smsApiKey}&variables_values=${code}&route=otp&numbers=${cleanPhone}`);
+    const textMessage = `Your CloudExchange secure access key is: ${code}`;
+    const response = await fetch(`https://www.fast2sms.com/dev/bulkV2?authorization=${smsApiKey}&route=q&message=${encodeURIComponent(textMessage)}&numbers=${cleanPhone}`);
     const data = await response.json();
     console.log(`[SECURITY SMS OTP] Fast2SMS dispatch result:`, data);
     if (data.return === false) {
