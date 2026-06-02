@@ -48,8 +48,6 @@ pm2 save
 echo '🌐 Configuring Nginx reverse proxy routing...'
 sudo tee /etc/nginx/sites-available/cloudexchange.conf > /dev/null <<'NGINX'
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
     server_name cloudexchange.in www.cloudexchange.in 43.205.232.106;
 
     # Backend API Routing
@@ -68,6 +66,28 @@ server {
         index index.html;
         try_files $uri $uri/ $uri/index.html $uri.html /index.html;
     }
+
+    listen [::]:443 ssl ipv6only=on; # managed by Certbot
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/cloudexchange.in/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/cloudexchange.in/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+}
+
+server {
+    if ($host = www.cloudexchange.in) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+    if ($host = cloudexchange.in) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name cloudexchange.in www.cloudexchange.in 43.205.232.106;
+    return 404; # managed by Certbot
 }
 NGINX
 
