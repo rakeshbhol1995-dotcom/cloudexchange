@@ -8,31 +8,51 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "CloudExchange | India's Premium Institutional Crypto Exchange",
-  description: "CloudExchange is a next-generation high-frequency digital asset exchange featuring a sub-millisecond matching engine, secure P2P UPI/IMPS escrow, dynamic selfie KYC, and verified cryptographic double-entry ledger audits.",
+  title: "CloudExchange™ | India's Tier-1 Cryptocurrency Exchange | Buy Bitcoin, Ethereum, USDT Instantly",
+  description: "CloudExchange is India's premium, Tier-1 digital asset trading platform and cryptocurrency exchange. Engineered with a sub-millisecond memory-mapped order matching core, secure P2P fiat-escrow with automated anti-fraud receipt checks, instant UPI/IMPS deposits, dynamic Liveness selfie KYC, and daily verified cryptographic Merkle Tree proof-of-reserves audits. Trade BTC, ETH, USDT, SOL, and custom tokens with industry-leading liquidity, secure passkey authentication, and Binance-level institutional custody safeguards.",
   keywords: [
     "CloudExchange",
     "cloudexchange",
     "cloud exchange",
     "crypto exchange India",
-    "secure bitcoin P2P escrow",
+    "buy bitcoin India",
+    "buy USDT India",
+    "best crypto exchange in India",
+    "Binance alternative India",
+    "trade BTC INR",
     "high-speed crypto matching engine",
+    "secure bitcoin P2P escrow",
     "UPI IMPS crypto escrow",
+    "instant crypto withdrawal India",
     "liveness selfie KYC exchange",
-    "proof of reserves",
-    "double entry audit ledger"
+    "cryptocurrency audit ledger",
+    "proof of reserves India",
+    "double entry audit ledger",
+    "highest liquidity exchange India",
+    "institutional digital asset trading",
+    "GoldChain L1 token",
+    "secure crypto wallet app"
   ],
+  icons: {
+    icon: [
+      { url: "/logo.png", sizes: "32x32", type: "image/png" },
+      { url: "/logo.png", sizes: "192x192", type: "image/png" },
+      { url: "/logo.png", sizes: "512x512", type: "image/png" }
+    ],
+    shortcut: "/logo.png",
+    apple: "/logo.png"
+  },
   alternates: {
-    canonical: "https://cloudexchange.com",
+    canonical: "https://cloudexchange.in",
   },
   openGraph: {
-    title: "CloudExchange | India's Premium Institutional Crypto Exchange",
-    description: "Experience India's highest-speed cryptocurrency trading platform. Sub-1ms ingestion latency, secure P2P UPI escrow, and double-entry ledger audits.",
-    url: "https://cloudexchange.com",
+    title: "CloudExchange™ | India's Premium Tier-1 Crypto Exchange Terminal",
+    description: "Experience India's highest-speed cryptocurrency trading platform. Sub-1ms ingestion latency, secure P2P UPI escrow, daily cryptographic audits, and Binance-level liquidity pools.",
+    url: "https://cloudexchange.in",
     siteName: "CloudExchange India",
     images: [
       {
-        url: "https://cloudexchange.com/icon.png",
+        url: "https://cloudexchange.in/logo.png",
         width: 512,
         height: 512,
         alt: "CloudExchange - Institutional Digital Asset Trading Terminal"
@@ -43,9 +63,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "CloudExchange | India's Premium Institutional Crypto Exchange",
-    description: "Sub-millisecond high-performance order matching and sharded audit ledger guarantee on CloudExchange.",
-    images: ["https://cloudexchange.com/icon.png"],
+    title: "CloudExchange™ | India's Premium Tier-1 Crypto Exchange Terminal",
+    description: "Sub-millisecond high-performance order matching, Merkle-tree proof of reserves, and sharded audit ledger guarantee on CloudExchange.",
+    images: ["https://cloudexchange.in/logo.png"],
   },
   robots: {
     index: true,
@@ -89,10 +109,10 @@ export default function RootLayout({
               "@context": "https://schema.org",
               "@type": "WebSite",
               "name": "CloudExchange",
-              "url": "https://cloudexchange.com",
+              "url": "https://cloudexchange.in",
               "potentialAction": {
                 "@type": "SearchAction",
-                "target": "https://cloudexchange.com/coins?q={search_term_string}",
+                "target": "https://cloudexchange.in/coins?q={search_term_string}",
                 "query-input": "required name=search_term_string"
               }
             })
@@ -105,8 +125,8 @@ export default function RootLayout({
               "@context": "https://schema.org",
               "@type": "FinancialProduct",
               "name": "CloudExchange",
-              "url": "https://cloudexchange.com",
-              "logo": "https://cloudexchange.com/icon.png",
+              "url": "https://cloudexchange.in",
+              "logo": "https://cloudexchange.in/icon.png",
               "description": "India's premier high-frequency digital asset terminal. Featuring sub-1ms ingestion latency, peer-to-peer escrow, and dual-entry ledger verification.",
               "category": "Cryptocurrency Exchange Service"
             })

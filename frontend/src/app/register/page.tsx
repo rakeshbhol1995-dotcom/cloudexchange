@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ShieldCheck, Cpu, Database, Eye, EyeOff, Sparkles, Smartphone, Mail } from "lucide-react";
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
+import { API_URL } from "../utils/api";
 
 function RegisterForm() {
   const searchParams = useSearchParams();
@@ -31,10 +32,41 @@ function RegisterForm() {
   const pwColors = ["transparent", "var(--red)", "var(--yellow)", "var(--green)"];
   const pwLabels = ["", "Weak", "Moderate", "Strong"];
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPw) return;
-    setStep("verify");
+
+    try {
+      const target = tab === "email" ? email : phone;
+      const endpoint = tab === "email" ? "send-email-otp" : "send-sms-otp";
+      
+      const payload: any = { email: target };
+      if (tab === "phone") {
+        payload.phoneNumber = phone;
+      }
+
+      const response = await fetch(`${API_URL}/security/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || "Failed to dispatch verification OTP.");
+        return;
+      }
+
+      // If in sandbox mode, alert the generated code for easy demonstration
+      if (data.sandbox && data.code) {
+        alert(`[SANDBOX MOCK] A mock OTP has been generated for demo purposes: ${data.code}\n(Since no custom email/SMS credentials are active yet, use this code to proceed!)`);
+      }
+
+      setStep("verify");
+    } catch (err) {
+      console.warn("Failed to dispatch OTP, using mock fallback: ", err);
+      setStep("verify");
+    }
   };
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
@@ -42,7 +74,27 @@ function RegisterForm() {
     if (otp.length < 6) return;
 
     try {
-      const response = await fetch("http://localhost:3002/api/auth/register", {
+      const target = tab === "email" ? email : phone;
+
+      // Verify OTP via backend API
+      const verifyResponse = await fetch(`${API_URL}/security/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: target,
+          emailCode: tab === "email" ? otp : undefined,
+          smsCode: tab === "phone" ? otp : undefined
+        })
+      });
+
+      const verifyData = await verifyResponse.json();
+      if (!verifyResponse.ok) {
+        alert(verifyData.error || "Verification failed. Incorrect OTP code.");
+        return;
+      }
+
+      // If OTP verified successfully, perform actual register!
+      const response = await fetch(`${API_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email || phone, password })
@@ -60,7 +112,7 @@ function RegisterForm() {
       localStorage.setItem("kyc_tier", "Tier-1 Basic (Email Verified)");
       window.location.href = "/trade";
     } catch (err: any) {
-      console.warn("Database registration offline, falling back to sandbox: ", err.message);
+      console.warn("Registration error, falling back to sandbox: ", err.message);
       localStorage.setItem("user_logged_in", "true");
       localStorage.setItem("username", email || phone || "new_trader@cloud.ex");
       window.location.href = "/trade";

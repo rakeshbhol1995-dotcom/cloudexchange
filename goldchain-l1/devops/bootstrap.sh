@@ -38,5 +38,4 @@ echo "Validator Node 0 Active RPC: http://localhost:8545"
 echo "Validator Node 1 Active RPC: http://localhost:8546"
 echo "Validator Node 2 Active RPC: http://localhost:8547"
 echo "----------------------------------------------------"
-echo "📝 Streaming live validator logs (Ctrl+C to detach):"
-docker-compose logs -f
+docker-compose ps

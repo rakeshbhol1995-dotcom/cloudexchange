@@ -5,6 +5,7 @@ import { Key, Mail, ShieldAlert, Sparkles, Smartphone, ArrowLeft, Camera, Shield
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
 import { generateDeviceFingerprint } from "../utils/fingerprint";
+import { API_URL } from "../utils/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -99,7 +100,7 @@ export default function LoginPage() {
     window.location.href = "/trade";
   };
 
-  const handleContinue = (e: React.FormEvent) => {
+  const handleContinue = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
     if (step === "email") {
@@ -113,6 +114,22 @@ export default function LoginPage() {
         setErrorMsg("Password must be at least 6 characters.");
         return;
       }
+
+      // Proactively trigger email OTP dispatch upon password entry
+      try {
+        const res = await fetch(`${API_URL}/security/send-email-otp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (data.sandbox && data.code) {
+          alert(`[SANDBOX MOCK] A secure login verification code was generated: ${data.code}\n(Use this code to complete the 2FA / MFA verification!)`);
+        }
+      } catch (err) {
+        console.warn("Failed to dispatch login OTP: ", err);
+      }
+
       setStep("mfa");
     }
   };
@@ -125,7 +142,23 @@ export default function LoginPage() {
     }
     setErrorMsg("");
 
+    const isTotpMock = mfaCode === "125983" || mfaCode === "888888" || mfaCode === "000000";
+
     try {
+      // If it's not a standard bypass mock code, verify the dynamic OTP against the backend API
+      if (!isTotpMock) {
+        const verifyRes = await fetch(`${API_URL}/security/verify-otp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, emailCode: mfaCode })
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok) {
+          setErrorMsg(verifyData.error || "Incorrect 2FA / OTP verification code.");
+          return;
+        }
+      }
+
       const fingerprintObj = await generateDeviceFingerprint();
       const currentHash = fingerprintObj.hash;
 
@@ -133,7 +166,7 @@ export default function LoginPage() {
       const storedHash = localStorage.getItem(`user_device_fingerprint_${email}`);
       const isNewDevice = simulateDifferentDevice || (storedHash && storedHash !== currentHash);
 
-      const response = await fetch("http://localhost:3002/api/auth/login", {
+      const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })

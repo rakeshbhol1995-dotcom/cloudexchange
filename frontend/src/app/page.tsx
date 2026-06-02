@@ -564,6 +564,168 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ─── TIER-1 PREMIUM SEO COMPARISON & GUIDE SECTION ─── */}
+      <section style={{
+        padding: "80px 0",
+        background: "rgba(6, 11, 25, 0.6)",
+        borderTop: "1px solid var(--border-light)",
+        borderBottom: "1px solid var(--border-light)",
+        position: "relative",
+        zIndex: 10
+      }}>
+        <div style={{ maxWidth: 1140, margin: "0 auto", padding: "0 24px" }}>
+          
+          {/* Header Title with premium badge */}
+          <div style={{ textAlign: "center", marginBottom: 54 }}>
+            <div style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              border: "1px solid rgba(255, 215, 0, 0.3)",
+              background: "rgba(255, 215, 0, 0.05)",
+              color: "var(--yellow)",
+              padding: "6px 14px",
+              borderRadius: 20,
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: 1,
+              textTransform: "uppercase",
+              marginBottom: 16
+            }}>
+              ⭐ Tier-1 Global Exchange Architecture
+            </div>
+            
+            <h2 style={{
+              fontSize: 32,
+              fontWeight: 900,
+              color: "#fff",
+              lineHeight: 1.3,
+              marginBottom: 16
+            }}>
+              India's Premier High-Performance Cryptocurrency Trading Platform
+            </h2>
+            
+            <p style={{
+              fontSize: 15,
+              color: "var(--text-secondary)",
+              maxWidth: 780,
+              margin: "0 auto",
+              lineHeight: 1.7
+            }}>
+              Engineered to meet the exact performance and security benchmarks of global Tier-1 platforms like Binance. CloudExchange provides ultra-low latency execution, secure Tatum blockchain endpoints, and deep liquidity arrays for retail and institutional traders in India.
+            </p>
+          </div>
+
+          {/* Comparison Matrix Grid */}
+          <div style={{
+            background: "rgba(13, 27, 56, 0.5)",
+            border: "1px solid var(--border)",
+            borderRadius: 16,
+            backdropFilter: "blur(12px)",
+            padding: 32,
+            marginBottom: 56
+          }}>
+            <h3 style={{
+              fontSize: 20,
+              fontWeight: 800,
+              color: "var(--text-primary)",
+              marginBottom: 24,
+              textAlign: "center"
+            }}>
+              Technical Infrastructure Comparison Matrix
+            </h3>
+            
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid var(--border)" }}>
+                    <th style={{ padding: "16px 12px", color: "var(--text-muted)", fontWeight: 700 }}>Feature Parameter</th>
+                    <th style={{ padding: "16px 12px", color: "var(--yellow)", fontWeight: 700 }}>CloudExchange Terminal</th>
+                    <th style={{ padding: "16px 12px", color: "var(--text-secondary)", fontWeight: 600 }}>Standard Indian Exchanges</th>
+                    <th style={{ padding: "16px 12px", color: "var(--text-secondary)", fontWeight: 600 }}>Binance / Global Tier-1</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    {
+                      feature: "Order Matching Ingestion Latency",
+                      cloud: "Sub-1ms (Microsecond tick-to-trade)",
+                      standard: "250ms - 1500ms (High slippage)",
+                      tier1: "Sub-1ms (Institutional standard)"
+                    },
+                    {
+                      feature: "Blockchain Address Generation",
+                      cloud: "Real On-Chain Tatum REST Endpoint Generation",
+                      standard: "Centralized internal pooled wallets",
+                      tier1: "Real-time HD Wallet derivations"
+                    },
+                    {
+                      feature: "Fiat UPI/IMPS P2P Settlements",
+                      cloud: "Escrow with Automated AI Template & Metadata Anti-Fraud Checks",
+                      standard: "Manual, slow support disputes (up to 48 hours)",
+                      tier1: "Escrow with manual buyer checks"
+                    },
+                    {
+                      feature: "Cryptographic Asset Security",
+                      cloud: "Google Authenticator TOTP & Biometric WebAuthn Passkeys",
+                      standard: "Basic password & standard SMS OTP",
+                      tier1: "Strict Passkey & Hardware keys support"
+                    },
+                    {
+                      feature: "Asset Backing & Insurance",
+                      cloud: "Merkle Tree Proof-of-Reserves & dedicated SAFU fund",
+                      standard: "Opaque balance reserves & no insurance",
+                      tier1: "100% Reserves & SAFU backing"
+                    }
+                  ].map((row, index) => (
+                    <tr key={index} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                      <td style={{ padding: "16px 12px", color: "#fff", fontWeight: 600 }}>{row.feature}</td>
+                      <td style={{ padding: "16px 12px", color: "var(--cyan)", fontWeight: 700 }}>{row.cloud}</td>
+                      <td style={{ padding: "16px 12px", color: "var(--text-secondary)" }}>{row.standard}</td>
+                      <td style={{ padding: "16px 12px", color: "var(--green)" }}>{row.tier1}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SEO Content Columns for Crawlers */}
+          <div className="reserves-flex" style={{
+            display: "flex",
+            gap: 40,
+            lineHeight: 1.8,
+            fontSize: 14,
+            color: "var(--text-secondary)"
+          }}>
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 16 }}>
+                Why CloudExchange is India's Leading Binance Alternative
+              </h3>
+              <p style={{ marginBottom: 16 }}>
+                As cryptocurrency markets mature, Indian traders require an exchange terminal that does not compromise on execution speeds or security parameters. CloudExchange fills this vacuum by introducing high-performance, containerized microservice architectures aligned with global exchanges like Binance.
+              </p>
+              <p>
+                By utilising high-speed Tatum blockchain integrations, our platform assigns unique, verifiable deposit addresses on networks including <strong>Ethereum (ERC-20)</strong>, <strong>BNB Smart Chain (BEP-20)</strong>, <strong>Bitcoin (BTC)</strong>, <strong>Solana (SOL)</strong>, and <strong>Tron (TRC-20)</strong>. This guarantees that user assets exist transparently on-chain, backed by a cryptographic double-entry ledger audits framework.
+              </p>
+            </div>
+            
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 16 }}>
+                Institutional Security: Passkeys, SAFU, and Liveness KYC
+              </h3>
+              <p style={{ marginBottom: 16 }}>
+                We believe that asset protection is paramount. CloudExchange enforces institutional-level protocols: biometric Passkeys eliminate phishing vulnerabilities, while our locally processed Webcamera Liveness Selfie KYC blocks identity theft attempt vectors dynamically before users trade.
+              </p>
+              <p>
+                Our <strong>Secure Asset Fund for Users (SAFU)</strong> isolates trading reserves from exchange operating balances, guaranteeing that retail funds remain 100% collateralised at all times. Every trade, deposit, and ledger update is mirrored across dynamic shadow replay validation units to assure transaction integrity.
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
       {/* ─── FOOTER ─── */}
       <footer style={{
         background: "rgba(10, 17, 40, 0.75)",

@@ -5,6 +5,7 @@ import { LogOut, ShieldCheck, MessageSquare, Upload, Check, AlertCircle, Termina
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
 import Header from "../components/Header";
+import { API_URL } from "../utils/api";
 
 interface Ad { id: string; seller: string; orders: number; completion: number; rate: number; available: number; minLimit: number; maxLimit: number; payments: string[]; isOffline?: boolean; }
 interface ChatMessage { sender: "system" | "buyer" | "seller"; text: string; time: string; }
@@ -302,7 +303,7 @@ export default function P2PMarketplace() {
     const usdtAmt = tradeType === "buy" ? (parseFloat(purchaseQty) / activeAd.rate).toFixed(2) : purchaseQty;
 
     try {
-      const res = await fetch("http://localhost:3002/api/p2p/escrows/create", {
+      const res = await fetch(`${API_URL}/p2p/escrows/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -400,7 +401,7 @@ export default function P2PMarketplace() {
     
     // Register UPI Ref on backend first
     try {
-      await fetch("http://localhost:3002/api/p2p/escrows/pay", {
+      await fetch(`${API_URL}/p2p/escrows/pay`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -434,7 +435,7 @@ export default function P2PMarketplace() {
           setTimeout(async () => {
             try {
               const inrAmt = activeAd ? (tradeType === "buy" ? parseFloat(purchaseQty) : parseFloat(purchaseQty) * activeAd.rate) : 0;
-              const res = await fetch("http://localhost:3002/api/p2p/webhook/upi", {
+              const res = await fetch(`${API_URL}/p2p/webhook/upi`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -472,7 +473,7 @@ export default function P2PMarketplace() {
 
   const handleReleaseUsdt = async () => {
     try {
-      const res = await fetch("http://localhost:3002/api/p2p/escrows/release", {
+      const res = await fetch(`${API_URL}/p2p/escrows/release`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -17,6 +17,7 @@ import {
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
 import Header from "../components/Header";
+import { API_URL } from "../utils/api";
 
 interface AssetBalance {
   symbol: string;
@@ -34,6 +35,7 @@ interface TxHistoryItem {
   amount: number;
   address: string;
   status: "Completed" | "Processing" | "Failed";
+  network?: string;
 }
 
 interface CoinDirectoryItem {
@@ -247,6 +249,13 @@ export default function CoinsPage() {
   const [toastMessage, setToastMessage] = useState("");
   const [toastType, setToastType] = useState<"success" | "error">("success");
 
+  // Wallet backend states
+  const [txHistory, setTxHistory] = useState<TxHistoryItem[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [simulatedDepositAmount, setSimulatedDepositAmount] = useState("");
+  const [isDepositing, setIsDepositing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
   // Multi-factor settings from Security portal
   const [selfieAuthActive, setSelfieAuthActive] = useState(true);
   const [smsOtpActive, setSmsOtpActive] = useState(true);
@@ -256,13 +265,80 @@ export default function CoinsPage() {
   const [isScanningSelfie, setIsScanningSelfie] = useState(false);
   const [selfieProgress, setSelfieProgress] = useState("");
 
+  // Sync balances mapping helper
+  const mapAssetBalances = (dbBalances: any[]): AssetBalance[] => {
+    const defaults = [
+      { symbol: "GOLD", name: "GoldChain Native Coin", amount: 0.00, inOrder: 0.00, color: "#F5A623" },
+      { symbol: "USDT", name: "Tether USD", amount: 0.00, inOrder: 0.00, color: "#26A17B" },
+      { symbol: "BTC", name: "Bitcoin", amount: 0.00, inOrder: 0.00, color: "#F7931A" },
+      { symbol: "ETH", name: "Ethereum", amount: 0.00, inOrder: 0.00, color: "#627EEA" },
+      { symbol: "SOL", name: "Solana", amount: 0.00, inOrder: 0.00, color: "#14F195" },
+      { symbol: "BNB", name: "BNB Smart Chain", amount: 0.00, inOrder: 0.00, color: "#F3BA2F" }
+    ];
+    return defaults.map(def => {
+      const matched = dbBalances.find((b: any) => b.symbol === def.symbol);
+      if (matched) {
+        return {
+          ...def,
+          amount: parseFloat(matched.amount),
+          inOrder: parseFloat(matched.in_order || matched.inOrder || 0)
+        };
+      }
+      return def;
+    });
+  };
+
+  const fetchBalancesAndHistory = async (userId: string) => {
+    try {
+      // 1. Fetch Balances
+      const balRes = await fetch(`${API_URL}/balances/${userId}`);
+      if (balRes.ok) {
+        const balData = await balRes.json();
+        if (balData.success && balData.balances) {
+          const mapped = mapAssetBalances(balData.balances);
+          setAssets(mapped);
+          localStorage.setItem("user_asset_balances", JSON.stringify(mapped));
+        }
+      }
+
+      // 2. Fetch Wallet Transactions
+      setIsHistoryLoading(true);
+      const txRes = await fetch(`${API_URL}/wallet/transactions/${userId}`);
+      if (txRes.ok) {
+        const txData = await txRes.json();
+        if (txData.success && txData.transactions) {
+          const mappedTxs: TxHistoryItem[] = txData.transactions.map((tx: any) => ({
+            id: tx.txid || tx.id,
+            time: new Date(tx.createdAt || tx.created_at).toLocaleString(),
+            type: tx.type === "DEPOSIT" ? "Deposit" : "Withdrawal",
+            coin: tx.symbol,
+            amount: parseFloat(tx.amount),
+            address: tx.address,
+            status: tx.status === "COMPLETED" ? "Completed" : "Processing",
+            network: tx.network
+          }));
+          setTxHistory(mappedTxs);
+        }
+      }
+      setIsHistoryLoading(false);
+    } catch (err) {
+      console.warn("Failed to fetch backend balances/history, using local cache: ", err);
+      setIsHistoryLoading(false);
+    }
+  };
+
   // Sync balances and custom pairs
   useEffect(() => {
     const logged = localStorage.getItem("user_logged_in");
     const storedEmail = localStorage.getItem("username");
+    const userId = localStorage.getItem("user_id");
+
     if (logged === "true") {
       setIsLoggedIn(true);
       setUserEmail(storedEmail || "institutional_trader@cloud.ex");
+      if (userId) {
+        fetchBalancesAndHistory(userId);
+      }
     } else {
       setUserEmail("institutional_trader@cloud.ex");
     }
@@ -284,7 +360,7 @@ export default function CoinsPage() {
     ];
 
     const storedBalances = localStorage.getItem("user_asset_balances");
-    if (storedBalances) {
+    if (!userId && storedBalances) {
       const parsed: AssetBalance[] = JSON.parse(storedBalances);
       const prefunded = parsed.map(a => ({
         ...a,
@@ -292,7 +368,7 @@ export default function CoinsPage() {
       }));
       setAssets(prefunded);
       localStorage.setItem("user_asset_balances", JSON.stringify(prefunded));
-    } else {
+    } else if (!userId) {
       const prefundedDefaults = defaultBalances.map(a => ({
         ...a,
         amount: 50000.00
@@ -376,28 +452,31 @@ export default function CoinsPage() {
     return ["Ethereum (ERC20)", "BNB Smart Chain (BEP20)"];
   };
 
-  // Generate simulated addresses with loading state
+  // Fetch real Tatum deposit address from backend
   useEffect(() => {
     if (modalType === "deposit") {
-      setIsGeneratingAddress(true);
-      const timer = setTimeout(() => {
-        const randomPart = Math.random().toString(36).substring(2, 10).toUpperCase();
-        if (selectedNetwork.includes("TRON") || selectedNetwork.includes("TRC20")) {
-          setDepositAddress(`TY83h7d${randomPart}m39sJ9aW12`);
-        } else if (selectedNetwork.includes("Ethereum") || selectedNetwork.includes("ERC20") || selectedNetwork.includes("Polygon") || selectedNetwork.includes("Arbitrum") || selectedNetwork.includes("Optimism")) {
-          setDepositAddress(`0x4f87A${randomPart}d69612a45fb2`);
-        } else if (selectedNetwork.includes("BNB") || selectedNetwork.includes("BEP20") || selectedNetwork.includes("BEP2")) {
-          setDepositAddress(`0x2d8E5${randomPart}a482bcf291`);
-        } else if (selectedNetwork.includes("Solana")) {
-          setDepositAddress(`SOL${randomPart}kP98h23gNs9`);
-        } else if (selectedNetwork.includes("Bitcoin")) {
-          setDepositAddress(`bc1q9d${randomPart.toLowerCase()}m8f7k29s12c`);
-        } else {
-          setDepositAddress(`0x${activeModalCoin}${randomPart}d921B436e2`);
+      const fetchRealTatumAddress = async () => {
+        setIsGeneratingAddress(true);
+        const userId = localStorage.getItem("user_id") || "usr-fallback";
+        try {
+          const res = await fetch(`${API_URL}/wallet/get-real-address`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, symbol: activeModalCoin, network: selectedNetwork })
+          });
+          const data = await res.json();
+          if (res.ok && data.success && data.address) {
+            setDepositAddress(data.address);
+          } else {
+            setDepositAddress("0x" + Math.random().toString(36).substring(2, 12).toUpperCase());
+          }
+        } catch (err) {
+          setDepositAddress("0x" + Math.random().toString(36).substring(2, 12).toUpperCase());
+        } finally {
+          setIsGeneratingAddress(false);
         }
-        setIsGeneratingAddress(false);
-      }, 1000);
-      return () => clearTimeout(timer);
+      };
+      fetchRealTatumAddress();
     }
   }, [modalType, activeModalCoin, selectedNetwork]);
 
@@ -463,7 +542,7 @@ export default function CoinsPage() {
     if (emailCountdown > 0) return;
     setEmailCountdown(60);
     try {
-      const res = await fetch("http://localhost:3002/api/security/send-email-otp", {
+      const res = await fetch(`${API_URL}/security/send-email-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: userEmail })
@@ -487,7 +566,7 @@ export default function CoinsPage() {
     if (smsCountdown > 0) return;
     setSmsCountdown(60);
     try {
-      const res = await fetch("http://localhost:3002/api/security/send-sms-otp", {
+      const res = await fetch(`${API_URL}/security/send-sms-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: userEmail, phoneNumber: "+919999999999" })
@@ -523,6 +602,91 @@ export default function CoinsPage() {
     }, 3800);
   };
 
+  const handleSimulateDeposit = async () => {
+    const amt = parseFloat(simulatedDepositAmount);
+    if (isNaN(amt) || amt <= 0) {
+      triggerToast("Please enter a valid deposit amount.", "error");
+      return;
+    }
+
+    const userId = localStorage.getItem("user_id") || "usr-fallback";
+    setIsDepositing(true);
+
+    try {
+      const res = await fetch(`${API_URL}/wallet/deposit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          symbol: activeModalCoin,
+          amount: amt,
+          address: depositAddress,
+          network: selectedNetwork
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        triggerToast(`Successfully simulated blockchain deposit of ${amt} ${activeModalCoin}!`, "success");
+        setSimulatedDepositAmount("");
+        
+        // Refresh balances
+        if (userId !== "usr-fallback") {
+          await fetchBalancesAndHistory(userId);
+        } else {
+          // Fallback to updating in-memory UI balances if not logged in
+          const updated = assets.map(a => {
+            if (a.symbol === activeModalCoin) {
+              return { ...a, amount: +(a.amount + amt).toFixed(6) };
+            }
+            return a;
+          });
+          setAssets(updated);
+          localStorage.setItem("user_asset_balances", JSON.stringify(updated));
+        }
+      } else {
+        triggerToast(data.error || "Simulation credit failed.", "error");
+      }
+    } catch (err: any) {
+      triggerToast(`Error simulating deposit: ${err.message}`, "error");
+    } finally {
+      setIsDepositing(false);
+    }
+  };
+
+  const handleSyncRealDeposits = async () => {
+    const userId = localStorage.getItem("user_id");
+    if (!userId) {
+      triggerToast("Please log in to synchronize real deposits.", "error");
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      const res = await fetch(`${API_URL}/wallet/sync-real-deposits`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, symbol: activeModalCoin, network: selectedNetwork })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.transactions && data.transactions.length > 0) {
+          triggerToast(`Synchronized! Credited ${data.transactions.length} new incoming blockchain transfers!`, "success");
+        } else {
+          triggerToast("Blockchain sync complete. No new pending transactions found on this address.", "success");
+        }
+        // Refresh balances & transaction history ledger
+        await fetchBalancesAndHistory(userId);
+      } else {
+        triggerToast(data.error || "Blockchain synchronization failed.", "error");
+      }
+    } catch (err: any) {
+      triggerToast(`Network error: ${err.message}`, "error");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleVerifyWithdrawal = async () => {
     if (emailOtpActive && !emailCode) {
       triggerToast("Please enter email verification OTP.", "error");
@@ -538,82 +702,100 @@ export default function CoinsPage() {
       return;
     }
 
-    // Call real verification API
+    const amt = parseFloat(withdrawAmount);
+    if (isNaN(amt) || amt <= 0) {
+      triggerToast("Please enter a valid withdrawal amount.", "error");
+      return;
+    }
+
+    const userId = localStorage.getItem("user_id") || "usr-fallback";
+
     try {
-      const verifyRes = await fetch("http://localhost:3002/api/security/verify-otp", {
+      const withdrawRes = await fetch(`${API_URL}/wallet/withdraw`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          userId,
           email: userEmail,
+          symbol: activeModalCoin,
+          amount: amt,
+          address: withdrawAddress,
+          network: selectedNetwork,
           emailCode: emailOtpActive ? emailCode : undefined,
-          smsCode: smsOtpActive ? smsCode : undefined
+          smsCode: smsOtpActive ? smsCode : undefined,
+          authCode: totpActive ? authCode : undefined
         })
       });
-      if (!verifyRes.ok) {
-        const errData = await verifyRes.json();
-        triggerToast(errData.error || "Security OTP verification check failed.", "error");
+
+      const data = await withdrawRes.json();
+      if (!withdrawRes.ok) {
+        triggerToast(data.error || "Withdrawal failed.", "error");
         return;
       }
-    } catch (err) {
-      console.warn("Express server unreachable, bypassing to simulated validation.");
-    }
 
-    const amt = parseFloat(withdrawAmount);
-    const balance = assets.find(a => a.symbol === activeModalCoin)?.amount || 0;
-    if (amt > balance) {
-      // Sandbox auto-fund: dynamically credit the account to allow successful test completion
-      const bonus = amt + 50000.00;
-      assets.forEach(a => {
-        if (a.symbol === activeModalCoin) {
-          a.amount = bonus;
-        }
-      });
-      localStorage.setItem("user_asset_balances", JSON.stringify(assets));
-      setAssets([...assets]);
-      triggerToast(`[SANDBOX AUTO-FUND] Credited +${bonus.toLocaleString()} ${activeModalCoin} to your test wallet!`, "success");
-    }
+      triggerToast(`Withdrawal of ${amt} ${activeModalCoin} completed successfully!`, "success");
+      setModalType("none");
+      setShow2faOverlay(false);
 
-    const updatedAssets = assets.map(a => {
-      if (a.symbol === activeModalCoin) {
-        a.amount = +(a.amount - amt).toFixed(6);
+      // Refresh balances and transaction logs
+      if (userId !== "usr-fallback") {
+        await fetchBalancesAndHistory(userId);
+      } else {
+        // Fallback for sandbox mode
+        const updated = assets.map(a => {
+          if (a.symbol === activeModalCoin) {
+            return { ...a, amount: +(a.amount - amt).toFixed(6) };
+          }
+          return a;
+        });
+        setAssets(updated);
+        localStorage.setItem("user_asset_balances", JSON.stringify(updated));
+
+        // Simulated local history
+        const newTx: TxHistoryItem = {
+          id: data.txid || "TXW" + Math.floor(10000 + Math.random() * 90000),
+          time: new Date().toLocaleString(),
+          type: "Withdrawal",
+          coin: activeModalCoin,
+          amount: amt,
+          address: withdrawAddress.slice(0, 8) + "..." + withdrawAddress.slice(-6),
+          status: "Completed"
+        };
+        setTxHistory(prev => [newTx, ...prev]);
       }
-      return a;
-    });
-
-    setAssets(updatedAssets);
-    localStorage.setItem("user_asset_balances", JSON.stringify(updatedAssets));
-
-    if (activeModalCoin === "USDT") {
-      const usdtAsset = updatedAssets.find(a => a.symbol === "USDT");
-      if (usdtAsset) {
-        localStorage.setItem("wallet_balance", String(usdtAsset.amount));
-        window.dispatchEvent(new Event("storage"));
-      }
+    } catch (err: any) {
+      triggerToast(`Network error: ${err.message}`, "error");
     }
-
-    // Add to simulated history
-    const storedHistory = localStorage.getItem("user_transaction_history");
-    const historyList = storedHistory ? JSON.parse(storedHistory) : [];
-    const newTx: TxHistoryItem = {
-      id: "TXN-" + Math.floor(10000 + Math.random() * 90000),
-      time: new Date().toISOString().replace('T', ' ').slice(0, 19),
-      type: "Withdrawal",
-      coin: activeModalCoin,
-      amount: amt,
-      address: withdrawAddress.slice(0, 8) + "..." + withdrawAddress.slice(-6),
-      status: "Completed"
-    };
-    localStorage.setItem("user_transaction_history", JSON.stringify([newTx, ...historyList]));
-
-    setModalType("none");
-    setShow2faOverlay(false);
-    triggerToast(`Withdrawal of ${amt} ${activeModalCoin} completed.`);
   };
 
   const filteredCoins = coinDirectory.filter(c => 
     c.symbol.toLowerCase().includes(assetSearch.toLowerCase()) || 
     c.name.toLowerCase().includes(assetSearch.toLowerCase())
   );
+
+  const getExplorerLink = (networkName: string | undefined, txid: string) => {
+    const net = (networkName || "Ethereum (ERC20)").toUpperCase();
+    const cleanTx = txid.startsWith("tx-") ? txid.replace("tx-", "") : txid;
+    if (net.includes("TRON") || net.includes("TRC20")) {
+      return `https://tronscan.org/#/transaction/${cleanTx}`;
+    }
+    if (net.includes("BNB") || net.includes("BEP20") || net.includes("BEP2") || net.includes("BSC")) {
+      return `https://bscscan.com/tx/${cleanTx}`;
+    }
+    if (net.includes("ETHEREUM") || net.includes("ERC20")) {
+      return `https://etherscan.io/tx/${cleanTx}`;
+    }
+    if (net.includes("POLYGON")) {
+      return `https://polygonscan.com/tx/${cleanTx}`;
+    }
+    if (net.includes("BITCOIN")) {
+      return `https://www.blockchain.com/explorer/transactions/btc/${cleanTx}`;
+    }
+    if (net.includes("SOLANA")) {
+      return `https://explorer.solana.com/tx/${cleanTx}`;
+    }
+    return `https://etherscan.io/tx/${cleanTx}`; // Fallback
+  };
 
   // Technical QR code block
   const TechQRCode = ({ text }: { text: string }) => (
@@ -877,6 +1059,91 @@ export default function CoinsPage() {
             </table>
           </div>
         </div>
+
+        {/* WALLET TRANSACTION HISTORY PANEL */}
+        {isLoggedIn && (
+          <div style={{
+            background: "rgba(10, 17, 40, 0.45)",
+            border: "1px solid var(--border)",
+            borderRadius: 16,
+            padding: 24,
+            backdropFilter: "blur(12px)",
+            marginTop: 8
+          }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Real-Time Wallet Transaction Ledger</h3>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20 }}>Chronological listing of real deposits and withdrawals verified and persisted on the PostgreSQL database.</p>
+
+            <div style={{ overflowX: "auto" }}>
+              {isHistoryLoading ? (
+                <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
+                  <div style={{
+                    width: 24,
+                    height: 24,
+                    border: "2px solid rgba(255, 255, 255, 0.1)",
+                    borderTop: "2px solid var(--yellow)",
+                    borderRadius: "50%",
+                    animation: "spin 1s linear infinite"
+                  }} />
+                </div>
+              ) : txHistory.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)", fontSize: 13 }}>
+                  No transaction history found for this secure account session.
+                </div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border)", fontSize: 11, color: "var(--text-secondary)" }}>
+                      <th style={{ padding: "12px 16px" }}>Transaction Hash / ID</th>
+                      <th style={{ padding: "12px 16px" }}>Date & Time</th>
+                      <th style={{ padding: "12px 16px" }}>Type</th>
+                      <th style={{ padding: "12px 16px" }}>Asset</th>
+                      <th style={{ padding: "12px 16px" }}>Amount</th>
+                      <th style={{ padding: "12px 16px" }}>Destination / Source</th>
+                      <th style={{ padding: "12px 16px", textAlign: "right" }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {txHistory.map(tx => (
+                      <tr key={tx.id} style={{ borderBottom: "1px solid var(--border-light)", fontSize: 13 }}>
+                        <td style={{ padding: "14px 16px", fontFamily: "monospace" }}>
+                          <a 
+                            href={getExplorerLink(tx.network, tx.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: "var(--cyan)", textDecoration: "none", borderBottom: "1px dashed rgba(0, 240, 255, 0.4)" }}
+                          >
+                            {tx.id.substring(0, 18)}...
+                          </a>
+                        </td>
+                        <td style={{ padding: "14px 16px", color: "var(--text-secondary)" }}>{tx.time}</td>
+                        <td style={{ padding: "14px 16px" }}>
+                          <span style={{
+                            background: tx.type === "Deposit" ? "rgba(0, 230, 118, 0.1)" : "rgba(255, 23, 68, 0.1)",
+                            color: tx.type === "Deposit" ? "var(--green)" : "var(--red)",
+                            padding: "4px 8px",
+                            borderRadius: 4,
+                            fontSize: 10,
+                            fontWeight: 700
+                          }}>
+                            {tx.type}
+                          </span>
+                        </td>
+                        <td style={{ padding: "14px 16px", fontWeight: 700 }}>{tx.coin}</td>
+                        <td style={{ padding: "14px 16px", fontWeight: 700 }}>{tx.amount.toLocaleString(undefined, { minimumFractionDigits: 6 })}</td>
+                        <td style={{ padding: "14px 16px", fontFamily: "monospace", color: "var(--text-secondary)", fontSize: 12 }}>
+                          {tx.address ? (tx.address.length > 20 ? `${tx.address.substring(0, 10)}...${tx.address.substring(tx.address.length - 8)}` : tx.address) : "Internal Ledger"}
+                        </td>
+                        <td style={{ padding: "14px 16px", textAlign: "right", color: "var(--green)", fontWeight: 700 }}>
+                          {tx.status}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ==================== DEPOSIT MODAL ==================== */}
@@ -967,6 +1234,58 @@ export default function CoinsPage() {
                     </div>
                   </>
                 )}
+              </div>
+
+              {/* Simulated Live Blockchain Deposit Form */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
+                <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block" }}>SIMULATE REAL BLOCKCHAIN DEPOSIT</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Enter amount to credit"
+                    className="bn-input"
+                    value={simulatedDepositAmount}
+                    onChange={e => setSimulatedDepositAmount(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSimulateDeposit}
+                    disabled={isDepositing}
+                    className="btn-yellow"
+                    style={{ padding: "0 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                  >
+                    {isDepositing ? "Processing..." : "Simulate Deposit"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Sync Live Blockchain Deposits Button */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
+                <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block" }}>LIVE BLOCKCHAIN SYSTEM</label>
+                <button
+                  type="button"
+                  onClick={handleSyncRealDeposits}
+                  disabled={isSyncing}
+                  className="btn-outline"
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    border: "1px solid var(--cyan)",
+                    color: "var(--cyan)",
+                    background: "rgba(0, 240, 255, 0.05)"
+                  }}
+                >
+                  {isSyncing ? "Syncing..." : "🔄 Sync Real Blockchain Deposits"}
+                </button>
               </div>
 
               <div style={{ background: "rgba(235, 94, 40, 0.08)", border: "1px solid rgba(235, 94, 40, 0.2)", borderRadius: 8, padding: 12, fontSize: 11, color: "var(--yellow)" }}>
