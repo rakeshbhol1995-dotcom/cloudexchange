@@ -49,6 +49,7 @@ echo '🌐 Configuring Nginx reverse proxy routing...'
 sudo tee /etc/nginx/sites-available/cloudexchange.conf > /dev/null <<'NGINX'
 server {
     listen 80 default_server;
+    listen [::]:80 default_server;
     server_name cloudexchange.in www.cloudexchange.in 43.205.232.106;
 
     # Backend API Routing

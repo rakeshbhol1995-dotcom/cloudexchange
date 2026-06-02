@@ -752,13 +752,7 @@ app.post("/api/security/send-email-otp", async (req, res) => {
   const user = process.env.EMAIL_USER;
   const pass = process.env.EMAIL_PASSWORD;
   if (!user || !pass) {
-    console.log(`[SECURITY EMAIL OTP] SMTP credentials missing. Returning sandbox OTP.`);
-    return res.json({
-      success: true,
-      message: "Verification OTP generated in sandbox mode.",
-      sandbox: true,
-      code
-    });
+    return res.status(500).json({ error: "SMTP Email Server credentials are not configured on the platform." });
   }
   try {
     const transporter = import_nodemailer.default.createTransport({
@@ -783,13 +777,8 @@ app.post("/api/security/send-email-otp", async (req, res) => {
     console.log(`[SECURITY EMAIL OTP] Sent to ${email} via SMTP.`);
     return res.json({ success: true, message: "Verification OTP sent to your email." });
   } catch (err) {
-    console.error("[SECURITY EMAIL OTP ERROR] SMTP delivery failed, falling back to sandbox: ", err);
-    return res.json({
-      success: true,
-      message: "Verification OTP generated in sandbox mode (SMTP fallback).",
-      sandbox: true,
-      code
-    });
+    console.error("[SECURITY EMAIL OTP ERROR] SMTP delivery failed: ", err);
+    return res.status(500).json({ error: `SMTP Email gateway rejected connection: ${err.message}` });
   }
 });
 app.post("/api/security/send-sms-otp", async (req, res) => {
@@ -807,40 +796,29 @@ app.post("/api/security/send-sms-otp", async (req, res) => {
   console.log(`[SECURITY SMS OTP] Generated ${code} for mobile associated with ${email}`);
   const smsApiKey = process.env.SMS_API_KEY;
   if (!smsApiKey) {
-    console.log(`[SECURITY SMS OTP] SMS API Key missing. Returning sandbox OTP.`);
-    return res.json({
-      success: true,
-      message: "Verification OTP generated in sandbox mode.",
-      sandbox: true,
-      code
-    });
+    return res.status(500).json({ error: "SMS Gateway API key is not configured on the platform." });
   }
   if (!phoneNumber) {
     return res.status(400).json({ error: "Mobile phone number is required to send SMS verification OTP." });
   }
   try {
-    const cleanPhone = phoneNumber.replace(/\D/g, "");
+    let cleanPhone = phoneNumber.replace(/\D/g, "");
+    if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) {
+      cleanPhone = cleanPhone.substring(2);
+    } else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) {
+      cleanPhone = cleanPhone.substring(1);
+    }
+    console.log(`[SECURITY SMS OTP] Sending OTP to cleaned mobile number: ${cleanPhone}`);
     const response = await fetch(`https://www.fast2sms.com/dev/bulkV2?authorization=${smsApiKey}&variables_values=${code}&route=otp&numbers=${cleanPhone}`);
     const data = await response.json();
     console.log(`[SECURITY SMS OTP] Fast2SMS dispatch result:`, data);
     if (data.return === false) {
-      console.warn(`[SECURITY SMS OTP] Fast2SMS gateway returned error: ${data.message}. Falling back to sandbox.`);
-      return res.json({
-        success: true,
-        message: "Verification OTP generated in sandbox mode.",
-        sandbox: true,
-        code
-      });
+      return res.status(500).json({ error: `Fast2SMS API gateway returned an error: ${data.message}` });
     }
     return res.json({ success: true, message: "Verification OTP sent to your phone via SMS." });
   } catch (err) {
-    console.error("[SECURITY SMS OTP ERROR] Fast2SMS API call failed, falling back to sandbox: ", err);
-    return res.json({
-      success: true,
-      message: "Verification OTP generated in sandbox mode.",
-      sandbox: true,
-      code
-    });
+    console.error("[SECURITY SMS OTP ERROR] Fast2SMS API call failed: ", err);
+    return res.status(500).json({ error: `Fast2SMS gateway error: ${err.message}` });
   }
 });
 app.post("/api/security/verify-otp", (req, res) => {
