@@ -534,17 +534,8 @@ export default function CoinsPage() {
     }
   }, [smsCountdown]);
 
-  // Disable body scroll when modal is open
-  useEffect(() => {
-    if (modalType !== "none" || show2faOverlay) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [modalType, show2faOverlay]);
+  // Note: Do NOT lock body scroll on mobile — it blocks fixed overlay scroll on iOS
+  // The fixed overlay itself handles scroll isolation
 
   const handleLogout = () => {
     localStorage.removeItem("user_logged_in");
@@ -1102,246 +1093,175 @@ export default function CoinsPage() {
         <div style={{
           position: "fixed",
           inset: 0,
-          background: "rgba(2, 4, 10, 0.85)",
-          backdropFilter: "blur(8px)",
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "center",
+          background: "rgba(2, 4, 10, 0.88)",
+          backdropFilter: "blur(10px)",
           zIndex: 1000,
-          padding: "16px 12px",
-          overflowY: "auto",
+          overflowY: "scroll",
           WebkitOverflowScrolling: "touch"
         }}>
           <div style={{
-            background: "rgba(10, 17, 40, 0.98)",
-            border: "1px solid var(--border)",
-            borderRadius: 16,
-            width: "100%",
-            maxWidth: 460,
-            padding: 20,
-            position: "relative",
-            boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
-            margin: "0 auto 16px",
-            maxHeight: "calc(100vh - 32px)",
-            overflowY: "auto"
+            display: "flex",
+            justifyContent: "center",
+            padding: "12px 12px 40px",
+            minHeight: "100%"
           }}>
-            {/* Top-Right Close Button for Mobile Accessibility */}
-            <button 
-              onClick={() => setModalType("none")}
-              aria-label="Close modal"
-              style={{
-                position: "absolute",
-                top: 20,
-                right: 20,
-                background: "rgba(255, 255, 255, 0.04)",
-                border: "1px solid rgba(255, 255, 255, 0.08)",
-                borderRadius: "50%",
-                width: 32,
-                height: 32,
+            <div style={{
+              background: "rgba(10, 17, 40, 0.98)",
+              border: "1px solid var(--border)",
+              borderRadius: 16,
+              width: "100%",
+              maxWidth: 460,
+              boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
+              display: "flex",
+              flexDirection: "column",
+              alignSelf: "flex-start"
+            }}>
+              {/* STICKY HEADER — always visible with back + close */}
+              <div style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                color: "var(--text-secondary)",
-                cursor: "pointer",
-                transition: "all 0.2s",
-                outline: "none",
+                justifyContent: "space-between",
+                padding: "14px 16px",
+                borderBottom: "1px solid var(--border-light)",
+                position: "sticky",
+                top: 0,
+                background: "rgba(10, 17, 40, 0.99)",
+                backdropFilter: "blur(16px)",
+                borderRadius: "16px 16px 0 0",
                 zIndex: 10
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
-                e.currentTarget.style.borderColor = "var(--red)";
-                e.currentTarget.style.color = "var(--red)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
-                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
-                e.currentTarget.style.color = "var(--text-secondary)";
-              }}
-            >
-              <X size={16} />
-            </button>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-              <button 
-                onClick={() => setModalType("none")} 
-                style={{ 
-                  display: "inline-flex", 
-                  alignItems: "center", 
-                  gap: 6, 
-                  background: "rgba(255, 255, 255, 0.04)", 
-                  border: "1px solid rgba(255, 255, 255, 0.08)", 
-                  borderRadius: "100px", 
-                  padding: "6px 14px", 
-                  color: "var(--text-secondary)", 
-                  fontSize: "12px", 
-                  fontWeight: 600, 
-                  cursor: "pointer", 
-                  outline: "none",
-                  transition: "all 0.2s"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
-                  e.currentTarget.style.borderColor = "var(--yellow)";
-                  e.currentTarget.style.color = "var(--yellow)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
-                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
-                  e.currentTarget.style.color = "var(--text-secondary)";
-                }}
-              >
-                <ArrowLeft size={14} /> Back
-              </button>
-              <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Deposit Crypto Assets</h3>
-            </div>
-            <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 20 }}>Send virtual digital assets directly to your institutional ledger account.</p>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div>
-                <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>SELECTED ASSET</label>
-                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{
-                    width: 20,
-                    height: 20,
-                    borderRadius: "50%",
-                    background: activeModalCoin === "GOLD" ? "transparent" : (coinDirectory.find(c => c.symbol === activeModalCoin)?.color || "var(--yellow)"),
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 9,
-                    color: "#fff",
-                    fontWeight: 800,
-                    overflow: "hidden"
-                  }}>
-                    {activeModalCoin === "GOLD" ? (
-                      <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
-                      activeModalCoin.slice(0, 2)
-                    )}
-                  </div>
-                  <strong style={{ fontSize: 14 }}>{activeModalCoin}</strong>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>SELECT DEPOSIT NETWORK</label>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-                  {getNetworksForCoin(activeModalCoin).map(net => (
-                    <button key={net} type="button" onClick={() => setSelectedNetwork(net)} style={{
-                      background: selectedNetwork === net ? "var(--yellow)" : "rgba(255,255,255,0.03)",
-                      color: selectedNetwork === net ? "#000" : "var(--text-secondary)",
-                      border: selectedNetwork === net ? "1px solid var(--yellow)" : "1px solid var(--border)",
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      fontSize: 10,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      textAlign: "center"
-                    }}>{net}</button>
-                  ))}
-                </div>
-              </div>
-
-              {/* QR and Address display with Loader Spinner */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "rgba(0,0,0,0.25)", border: "1px dashed var(--border)", borderRadius: 12, padding: 20, marginTop: 10, minHeight: 240, justifyContent: "center" }}>
-                {isGeneratingAddress ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-                    <div style={{
-                      width: 32,
-                      height: 32,
-                      border: "3px solid rgba(255, 255, 255, 0.1)",
-                      borderTop: "3px solid var(--yellow)",
-                      borderRadius: "50%",
-                      animation: "spin 1s linear infinite"
-                    }} />
-                    <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>Generating unique network address...</span>
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ background: "#fff", padding: 10, borderRadius: 10, boxShadow: "0 0 20px rgba(255,255,255,0.1)" }}>
-                      <QRCodeSVG
-                        value={depositAddress || "cloudexchange.in"}
-                        size={140}
-                        bgColor="#ffffff"
-                        fgColor="#000000"
-                        level="H"
-                      />
-                    </div>
-                    <div style={{ width: "100%", marginTop: 20 }}>
-                      <label style={{ fontSize: 9, color: "var(--text-muted)", fontWeight: 700, display: "block", marginBottom: 4, textAlign: "center" }}>YOUR UNIQUE {activeModalCoin} ADDRESS</label>
-                      <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 6, padding: 8, alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{ fontSize: 11, fontFamily: "monospace", color: "var(--cyan)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 10 }}>{depositAddress}</span>
-                        <button onClick={copyToClipboard} style={{ background: "none", border: "none", color: "var(--yellow)", cursor: "pointer", display: "flex", alignItems: "center" }}>
-                          <Copy size={14} />
-                        </button>
-                      </div>
-                      {copyFeedback && <div style={{ fontSize: 10, color: "var(--green)", textAlign: "center", marginTop: 4, fontWeight: 700 }}>Copied to clipboard!</div>}
-                    </div>
-                  </>
-                )}
-              </div>
-
-
-              {/* Info: Real blockchain deposit instructions */}
-              <div style={{ background: "rgba(0, 240, 255, 0.06)", border: "1px solid rgba(0, 240, 255, 0.2)", borderRadius: 8, padding: 12, fontSize: 11, color: "var(--cyan)" }}>
-                ✅ Send real {activeModalCoin} on {selectedNetwork} to the address above. Your balance will update automatically after blockchain confirmation.
-              </div>
-              {/* Sync Live Blockchain Deposits Button */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
-                <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block" }}>LIVE BLOCKCHAIN SYSTEM</label>
+              }}>
                 <button
-                  type="button"
-                  onClick={handleSyncRealDeposits}
-                  disabled={isSyncing}
-                  className="btn-outline"
+                  onClick={() => setModalType("none")}
                   style={{
-                    width: "100%",
-                    padding: "10px",
-                    fontSize: 12,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "rgba(255, 255, 255, 0.06)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    borderRadius: "100px",
+                    padding: "7px 16px",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
                     fontWeight: 700,
                     cursor: "pointer",
+                    outline: "none"
+                  }}
+                >
+                  <ArrowLeft size={15} /> Back
+                </button>
+                <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text-primary)" }}>Deposit Crypto</span>
+                <button
+                  onClick={() => setModalType("none")}
+                  aria-label="Close"
+                  style={{
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "50%",
+                    width: 32,
+                    height: 32,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    gap: 6,
-                    border: "1px solid var(--cyan)",
-                    color: "var(--cyan)",
-                    background: "rgba(0, 240, 255, 0.05)"
+                    color: "var(--text-secondary)",
+                    cursor: "pointer",
+                    outline: "none"
                   }}
                 >
-                  {isSyncing ? "Syncing..." : "🔄 Sync Real Blockchain Deposits"}
+                  <X size={16} />
                 </button>
               </div>
 
-              <div style={{ background: "rgba(235, 94, 40, 0.08)", border: "1px solid rgba(235, 94, 40, 0.2)", borderRadius: 8, padding: 12, fontSize: 11, color: "var(--yellow)" }}>
-                ⚠️ Send only {activeModalCoin} on {selectedNetwork} network to this address. Sending other assets will result in permanent loss.
-              </div>
+              {/* SCROLLABLE BODY CONTENT */}
+              <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 14 }}>
+                <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>Send crypto assets directly to your institutional ledger account.</p>
 
-              {/* Bottom Navigation Buttons for Mobile/Desktop Quick Close */}
-              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-                <button 
-                  type="button" 
-                  onClick={() => setModalType("none")} 
-                  className="btn-outline" 
-                  style={{ flex: 1, height: 40, cursor: "pointer", fontSize: 12, fontWeight: 700 }}
-                >
-                  Close &amp; Go Back
-                </button>
-                <Link 
-                  href={`/trade?pair=${activeModalCoin}/USDT`} 
-                  className="btn-yellow" 
-                  style={{ 
-                    flex: 1, 
-                    textDecoration: "none", 
-                    textAlign: "center", 
-                    lineHeight: "40px", 
-                    height: 40, 
-                    padding: 0, 
-                    fontSize: 12, 
-                    fontWeight: 700 
-                  }}
-                >
-                  Enter Trading Desk
-                </Link>
+                <div>
+                  <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>SELECTED ASSET</label>
+                  <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{
+                      width: 22, height: 22, borderRadius: "50%",
+                      background: activeModalCoin === "GOLD" ? "transparent" : (coinDirectory.find(c => c.symbol === activeModalCoin)?.color || "var(--yellow)"),
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 9, color: "#fff", fontWeight: 800, overflow: "hidden"
+                    }}>
+                      {activeModalCoin === "GOLD" ? (
+                        <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : activeModalCoin.slice(0, 2)}
+                    </div>
+                    <strong style={{ fontSize: 14 }}>{activeModalCoin}</strong>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>SELECT DEPOSIT NETWORK</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+                    {getNetworksForCoin(activeModalCoin).map(net => (
+                      <button key={net} type="button" onClick={() => setSelectedNetwork(net)} style={{
+                        background: selectedNetwork === net ? "var(--yellow)" : "rgba(255,255,255,0.03)",
+                        color: selectedNetwork === net ? "#000" : "var(--text-secondary)",
+                        border: selectedNetwork === net ? "1px solid var(--yellow)" : "1px solid var(--border)",
+                        padding: "8px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700,
+                        cursor: "pointer", textAlign: "center"
+                      }}>{net}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* QR Code + Address */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "rgba(0,0,0,0.25)", border: "1px dashed var(--border)", borderRadius: 12, padding: 16, minHeight: 180, justifyContent: "center" }}>
+                  {isGeneratingAddress ? (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 32, height: 32, border: "3px solid rgba(255,255,255,0.1)", borderTop: "3px solid var(--yellow)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                      <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>Generating address...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ background: "#fff", padding: 8, borderRadius: 10, boxShadow: "0 0 20px rgba(255,255,255,0.1)" }}>
+                        <QRCodeSVG value={depositAddress || "cloudexchange.in"} size={120} bgColor="#ffffff" fgColor="#000000" level="H" />
+                      </div>
+                      <div style={{ width: "100%", marginTop: 14 }}>
+                        <label style={{ fontSize: 9, color: "var(--text-muted)", fontWeight: 700, display: "block", marginBottom: 4, textAlign: "center" }}>YOUR {activeModalCoin} DEPOSIT ADDRESS</label>
+                        <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 6, padding: "8px 10px", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                          <span style={{ fontSize: 10, fontFamily: "monospace", color: "var(--cyan)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{depositAddress}</span>
+                          <button onClick={copyToClipboard} style={{ background: "none", border: "none", color: "var(--yellow)", cursor: "pointer", display: "flex", alignItems: "center", flexShrink: 0 }}>
+                            <Copy size={14} />
+                          </button>
+                        </div>
+                        {copyFeedback && <div style={{ fontSize: 10, color: "var(--green)", textAlign: "center", marginTop: 4, fontWeight: 700 }}>✓ Copied!</div>}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div style={{ background: "rgba(0,240,255,0.06)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 8, padding: 12, fontSize: 11, color: "var(--cyan)" }}>
+                  ✅ Send real {activeModalCoin} on {selectedNetwork} to the address above. Balance updates after blockchain confirmation.
+                </div>
+
+                <div style={{ borderTop: "1px solid var(--border-light)", paddingTop: 14 }}>
+                  <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 8 }}>LIVE BLOCKCHAIN SYNC</label>
+                  <button
+                    type="button"
+                    onClick={handleSyncRealDeposits}
+                    disabled={isSyncing}
+                    className="btn-outline"
+                    style={{ width: "100%", padding: "10px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "1px solid var(--cyan)", color: "var(--cyan)", background: "rgba(0,240,255,0.05)" }}
+                  >
+                    {isSyncing ? "Syncing..." : "🔄 Sync Blockchain Deposits"}
+                  </button>
+                </div>
+
+                <div style={{ background: "rgba(235,94,40,0.08)", border: "1px solid rgba(235,94,40,0.2)", borderRadius: 8, padding: 12, fontSize: 11, color: "var(--yellow)" }}>
+                  ⚠️ Send only {activeModalCoin} on {selectedNetwork}. Sending other assets = permanent loss.
+                </div>
+
+                <div style={{ display: "flex", gap: 10, paddingBottom: 4 }}>
+                  <button type="button" onClick={() => setModalType("none")} className="btn-outline" style={{ flex: 1, height: 44, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                    ← Close
+                  </button>
+                  <Link href={`/trade?pair=${activeModalCoin}/USDT`} className="btn-yellow" style={{ flex: 1, textDecoration: "none", textAlign: "center", lineHeight: "44px", height: 44, padding: 0, fontSize: 13, fontWeight: 700 }}>
+                    Trade Now
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -1353,168 +1273,154 @@ export default function CoinsPage() {
         <div style={{
           position: "fixed",
           inset: 0,
-          background: "rgba(2, 4, 10, 0.85)",
-          backdropFilter: "blur(8px)",
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "center",
+          background: "rgba(2, 4, 10, 0.88)",
+          backdropFilter: "blur(10px)",
           zIndex: 1000,
-          padding: "16px 12px",
-          overflowY: "auto",
+          overflowY: "scroll",
           WebkitOverflowScrolling: "touch"
         }}>
           <div style={{
-            background: "rgba(10, 17, 40, 0.98)",
-            border: "1px solid var(--border)",
-            borderRadius: 16,
-            width: "100%",
-            maxWidth: 460,
-            padding: 20,
-            position: "relative",
-            boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
-            margin: "0 auto 16px",
-            maxHeight: "calc(100vh - 32px)",
-            overflowY: "auto"
+            display: "flex",
+            justifyContent: "center",
+            padding: "12px 12px 40px",
+            minHeight: "100%"
           }}>
-            {/* Top-Right Close Button for Mobile Accessibility */}
-            <button 
-              onClick={() => setModalType("none")}
-              aria-label="Close modal"
-              style={{
-                position: "absolute",
-                top: 20,
-                right: 20,
-                background: "rgba(255, 255, 255, 0.04)",
-                border: "1px solid rgba(255, 255, 255, 0.08)",
-                borderRadius: "50%",
-                width: 32,
-                height: 32,
+            <div style={{
+              background: "rgba(10, 17, 40, 0.98)",
+              border: "1px solid var(--border)",
+              borderRadius: 16,
+              width: "100%",
+              maxWidth: 460,
+              boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
+              display: "flex",
+              flexDirection: "column",
+              alignSelf: "flex-start"
+            }}>
+              {/* STICKY HEADER */}
+              <div style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                color: "var(--text-secondary)",
-                cursor: "pointer",
-                transition: "all 0.2s",
-                outline: "none",
+                justifyContent: "space-between",
+                padding: "14px 16px",
+                borderBottom: "1px solid var(--border-light)",
+                position: "sticky",
+                top: 0,
+                background: "rgba(10, 17, 40, 0.99)",
+                backdropFilter: "blur(16px)",
+                borderRadius: "16px 16px 0 0",
                 zIndex: 10
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
-                e.currentTarget.style.borderColor = "var(--red)";
-                e.currentTarget.style.color = "var(--red)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
-                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
-                e.currentTarget.style.color = "var(--text-secondary)";
-              }}
-            >
-              <X size={16} />
-            </button>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-              <button 
-                type="button"
-                onClick={() => setModalType("none")} 
-                style={{ 
-                  display: "inline-flex", 
-                  alignItems: "center", 
-                  gap: 6, 
-                  background: "rgba(255, 255, 255, 0.04)", 
-                  border: "1px solid rgba(255, 255, 255, 0.08)", 
-                  borderRadius: "100px", 
-                  padding: "6px 14px", 
-                  color: "var(--text-secondary)", 
-                  fontSize: "12px", 
-                  fontWeight: 600, 
-                  cursor: "pointer", 
-                  outline: "none",
-                  transition: "all 0.2s"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
-                  e.currentTarget.style.borderColor = "var(--yellow)";
-                  e.currentTarget.style.color = "var(--yellow)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
-                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
-                  e.currentTarget.style.color = "var(--text-secondary)";
-                }}
-              >
-                <ArrowLeft size={14} /> Back
-              </button>
-              <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Withdraw Crypto Assets</h3>
-            </div>
-            <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 20 }}>Dispatch locked tokens from your ledger directly to an external cold storage wallet.</p>
-
-            <form onSubmit={(e) => { e.preventDefault(); setShow2faOverlay(true); }} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div>
-                <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>SELECTED ASSET</label>
-                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{
-                    width: 20,
-                    height: 20,
-                    borderRadius: "50%",
-                    background: activeModalCoin === "GOLD" ? "transparent" : (coinDirectory.find(c => c.symbol === activeModalCoin)?.color || "var(--yellow)"),
-                    display: "flex",
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setModalType("none")}
+                  style={{
+                    display: "inline-flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 9,
-                    color: "#fff",
-                    fontWeight: 800,
-                    overflow: "hidden"
-                  }}>
-                    {activeModalCoin === "GOLD" ? (
-                      <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
-                      activeModalCoin.slice(0, 2)
-                    )}
+                    gap: 6,
+                    background: "rgba(255, 255, 255, 0.06)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    borderRadius: "100px",
+                    padding: "7px 16px",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    outline: "none"
+                  }}
+                >
+                  <ArrowLeft size={15} /> Back
+                </button>
+                <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text-primary)" }}>Withdraw Crypto</span>
+                <button
+                  onClick={() => setModalType("none")}
+                  aria-label="Close"
+                  style={{
+                    background: "rgba(255, 255, 255, 0.04)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    borderRadius: "50%",
+                    width: 32, height: 32,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--text-secondary)", cursor: "pointer", outline: "none"
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* SCROLLABLE BODY CONTENT */}
+              <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 14 }}>
+                <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>Dispatch locked tokens from your ledger directly to an external cold storage wallet.</p>
+
+                <form onSubmit={(e) => { e.preventDefault(); setShow2faOverlay(true); }} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div>
+                    <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>SELECTED ASSET</label>
+                    <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: "50%",
+                        background: activeModalCoin === "GOLD" ? "transparent" : (coinDirectory.find(c => c.symbol === activeModalCoin)?.color || "var(--yellow)"),
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 9,
+                        color: "#fff",
+                        fontWeight: 800,
+                        overflow: "hidden"
+                      }}>
+                        {activeModalCoin === "GOLD" ? (
+                          <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          activeModalCoin.slice(0, 2)
+                        )}
+                      </div>
+                      <strong style={{ fontSize: 14 }}>{activeModalCoin}</strong>
+                    </div>
                   </div>
-                  <strong style={{ fontSize: 14 }}>{activeModalCoin}</strong>
-                </div>
-              </div>
 
-              <div>
-                <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>RECIPIENT ADDRESS</label>
-                <input
-                  type="text"
-                  className="bn-input"
-                  placeholder={`Enter correct recipient ${activeModalCoin} address`}
-                  value={withdrawAddress}
-                  onChange={e => setWithdrawAddress(e.target.value)}
-                  required
-                />
-              </div>
+                  <div>
+                    <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>RECIPIENT ADDRESS</label>
+                    <input
+                      type="text"
+                      className="bn-input"
+                      placeholder={`Enter correct recipient ${activeModalCoin} address`}
+                      value={withdrawAddress}
+                      onChange={e => setWithdrawAddress(e.target.value)}
+                      required
+                    />
+                  </div>
 
-              <div>
-                <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>WITHDRAWAL AMOUNT</label>
-                <div style={{ position: "relative" }}>
-                  <input
-                    type="number"
-                    step="any"
-                    className="bn-input"
-                    placeholder="0.00"
-                    value={withdrawAmount}
-                    onChange={e => setWithdrawAmount(e.target.value)}
-                    required
-                  />
-                  <span style={{ position: "absolute", right: 14, top: 12, fontSize: 12, fontWeight: 700, color: "var(--text-muted)" }}>{activeModalCoin}</span>
-                </div>
-              </div>
+                  <div>
+                    <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>WITHDRAWAL AMOUNT</label>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        type="number"
+                        step="any"
+                        className="bn-input"
+                        placeholder="0.00"
+                        value={withdrawAmount}
+                        onChange={e => setWithdrawAmount(e.target.value)}
+                        required
+                      />
+                      <span style={{ position: "absolute", right: 14, top: 12, fontSize: 12, fontWeight: 700, color: "var(--text-muted)" }}>{activeModalCoin}</span>
+                    </div>
+                  </div>
 
-              <button type="submit" className="btn-yellow" style={{ width: "100%", padding: 12, fontWeight: 700, fontSize: 13, marginTop: 12 }}>
-                Submit Dispatch Request
-              </button>
-              
-              <button 
-                type="button" 
-                onClick={() => setModalType("none")} 
-                className="btn-outline" 
-                style={{ width: "100%", padding: 10, fontWeight: 700, fontSize: 12, marginTop: 8, cursor: "pointer" }}
-              >
-                Cancel &amp; Go Back
-              </button>
-            </form>
+                  <button type="submit" className="btn-yellow" style={{ width: "100%", padding: 12, fontWeight: 700, fontSize: 13, marginTop: 12 }}>
+                    Submit Dispatch Request
+                  </button>
+                  
+                  <button 
+                    type="button" 
+                    onClick={() => setModalType("none")} 
+                    className="btn-outline" 
+                    style={{ width: "100%", padding: 10, fontWeight: 700, fontSize: 12, marginTop: 8, cursor: "pointer" }}
+                  >
+                    Cancel &amp; Go Back
+                  </button>
+                </form>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1524,162 +1430,148 @@ export default function CoinsPage() {
         <div style={{
           position: "fixed",
           inset: 0,
-          background: "rgba(2, 4, 10, 0.95)",
-          backdropFilter: "blur(12px)",
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "center",
+          background: "rgba(2, 4, 10, 0.88)",
+          backdropFilter: "blur(10px)",
           zIndex: 1100,
-          padding: "16px 12px",
-          overflowY: "auto",
+          overflowY: "scroll",
           WebkitOverflowScrolling: "touch"
         }}>
           <div style={{
-            background: "rgba(10, 17, 40, 0.98)",
-            border: "1px solid var(--border)",
-            borderRadius: 16,
-            width: "100%",
-            maxWidth: 420,
-            padding: 20,
-            position: "relative",
-            margin: "0 auto 16px",
-            maxHeight: "calc(100vh - 32px)",
-            overflowY: "auto"
+            display: "flex",
+            justifyContent: "center",
+            padding: "12px 12px 40px",
+            minHeight: "100%"
           }}>
-            {/* Top-Right Close Button for Mobile Accessibility */}
-            <button 
-              onClick={() => setShow2faOverlay(false)}
-              aria-label="Close modal"
-              style={{
-                position: "absolute",
-                top: 20,
-                right: 20,
-                background: "rgba(255, 255, 255, 0.04)",
-                border: "1px solid rgba(255, 255, 255, 0.08)",
-                borderRadius: "50%",
-                width: 32,
-                height: 32,
+            <div style={{
+              background: "rgba(10, 17, 40, 0.98)",
+              border: "1px solid var(--border)",
+              borderRadius: 16,
+              width: "100%",
+              maxWidth: 420,
+              boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
+              display: "flex",
+              flexDirection: "column",
+              alignSelf: "flex-start"
+            }}>
+              {/* STICKY HEADER */}
+              <div style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                color: "var(--text-secondary)",
-                cursor: "pointer",
-                transition: "all 0.2s",
-                outline: "none",
+                justifyContent: "space-between",
+                padding: "14px 16px",
+                borderBottom: "1px solid var(--border-light)",
+                position: "sticky",
+                top: 0,
+                background: "rgba(10, 17, 40, 0.99)",
+                backdropFilter: "blur(16px)",
+                borderRadius: "16px 16px 0 0",
                 zIndex: 10
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
-                e.currentTarget.style.borderColor = "var(--red)";
-                e.currentTarget.style.color = "var(--red)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
-                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
-                e.currentTarget.style.color = "var(--text-secondary)";
-              }}
-            >
-              <X size={16} />
-            </button>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, borderBottom: "1px solid var(--border-light)", paddingBottom: 10 }}>
-              <button 
-                type="button"
-                onClick={() => setShow2faOverlay(false)} 
-                style={{ 
-                  display: "inline-flex", 
-                  alignItems: "center", 
-                  gap: 6, 
-                  background: "rgba(255, 255, 255, 0.04)", 
-                  border: "1px solid rgba(255, 255, 255, 0.08)", 
-                  borderRadius: "100px", 
-                  padding: "6px 14px", 
-                  color: "var(--text-secondary)", 
-                  fontSize: "12px", 
-                  fontWeight: 600, 
-                  cursor: "pointer", 
-                  outline: "none",
-                  transition: "all 0.2s"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
-                  e.currentTarget.style.borderColor = "var(--yellow)";
-                  e.currentTarget.style.color = "var(--yellow)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
-                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
-                  e.currentTarget.style.color = "var(--text-secondary)";
-                }}
-              >
-                <ArrowLeft size={14} /> Back
-              </button>
-              <h3 style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>Multi-Factor Authorization</h3>
-            </div>
-            
-            <p style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 16 }}>Confirm withdrawal dispatch of {withdrawAmount} {activeModalCoin}.</p>
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setShow2faOverlay(false)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "rgba(255, 255, 255, 0.06)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    borderRadius: "100px",
+                    padding: "7px 16px",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    outline: "none"
+                  }}
+                >
+                  <ArrowLeft size={15} /> Back
+                </button>
+                <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text-primary)" }}>Confirm 2FA</span>
+                <button
+                  onClick={() => setShow2faOverlay(false)}
+                  aria-label="Close"
+                  style={{
+                    background: "rgba(255, 255, 255, 0.04)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    borderRadius: "50%",
+                    width: 32, height: 32,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--text-secondary)", cursor: "pointer", outline: "none"
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {emailOtpActive && (
-                <div>
-                  <label style={{ fontSize: 10, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>EMAIL VERIFICATION CODE</label>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      className="bn-input"
-                      placeholder="6-digit email code"
-                      value={emailCode}
-                      onChange={e => setEmailCode(e.target.value)}
-                      style={{ flex: 1 }}
-                    />
-                    <button onClick={handleSendEmailCode} disabled={emailCountdown > 0} className="btn-outline" style={{ padding: "0 14px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      {emailCountdown > 0 ? `Resend (${emailCountdown}s)` : "Send Code"}
-                    </button>
-                  </div>
+              {/* SCROLLABLE BODY CONTENT */}
+              <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 14 }}>
+                <p style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>Confirm withdrawal dispatch of {withdrawAmount} {activeModalCoin}.</p>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  {emailOtpActive && (
+                    <div>
+                      <label style={{ fontSize: 10, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>EMAIL VERIFICATION CODE</label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          className="bn-input"
+                          placeholder="6-digit email code"
+                          value={emailCode}
+                          onChange={e => setEmailCode(e.target.value)}
+                          style={{ flex: 1 }}
+                        />
+                        <button onClick={handleSendEmailCode} disabled={emailCountdown > 0} className="btn-outline" style={{ padding: "0 14px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
+                          {emailCountdown > 0 ? `Resend (${emailCountdown}s)` : "Send Code"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {smsOtpActive && (
+                    <div>
+                      <label style={{ fontSize: 10, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>MOBILE SMS VERIFICATION CODE</label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          className="bn-input"
+                          placeholder="6-digit SMS code"
+                          value={smsCode}
+                          onChange={e => setSmsCode(e.target.value)}
+                          style={{ flex: 1 }}
+                        />
+                        <button onClick={handleSendSmsCode} disabled={smsCountdown > 0} className="btn-outline" style={{ padding: "0 14px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
+                          {smsCountdown > 0 ? `Resend (${smsCountdown}s)` : "Send SMS"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {localStorage.getItem("2fa_totp_active") === "true" && (
+                    <div>
+                      <label style={{ fontSize: 10, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>GOOGLE AUTHENTICATOR (TOTP)</label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        className="bn-input"
+                        placeholder="6-digit TOTP sequence code"
+                        value={authCode}
+                        onChange={e => setAuthCode(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  <button 
+                    onClick={handleVerifyWithdrawal} 
+                    className="btn-yellow" 
+                    style={{ width: "100%", padding: 12, fontWeight: 700, fontSize: 13, marginTop: 10 }}
+                  >
+                    Confirm Dispatch Authorization
+                  </button>
                 </div>
-              )}
-
-              {smsOtpActive && (
-                <div>
-                  <label style={{ fontSize: 10, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>MOBILE SMS VERIFICATION CODE</label>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      className="bn-input"
-                      placeholder="6-digit SMS code"
-                      value={smsCode}
-                      onChange={e => setSmsCode(e.target.value)}
-                      style={{ flex: 1 }}
-                    />
-                    <button onClick={handleSendSmsCode} disabled={smsCountdown > 0} className="btn-outline" style={{ padding: "0 14px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      {smsCountdown > 0 ? `Resend (${smsCountdown}s)` : "Send SMS"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {localStorage.getItem("2fa_totp_active") === "true" && (
-                <div>
-                  <label style={{ fontSize: 10, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>GOOGLE AUTHENTICATOR (TOTP)</label>
-                  <input
-                    type="text"
-                    maxLength={6}
-                    className="bn-input"
-                    placeholder="6-digit TOTP sequence code"
-                    value={authCode}
-                    onChange={e => setAuthCode(e.target.value)}
-                  />
-                </div>
-              )}
-
-              <button 
-                onClick={handleVerifyWithdrawal} 
-                className="btn-yellow" 
-                style={{ width: "100%", padding: 12, fontWeight: 700, fontSize: 13, marginTop: 10 }}
-              >
-                Confirm Dispatch Authorization
-              </button>
+              </div>
             </div>
           </div>
         </div>
