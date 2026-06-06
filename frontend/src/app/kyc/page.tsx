@@ -1337,66 +1337,63 @@ export default function KycWalletHub() {
         <div style={{
           position: "fixed",
           inset: 0,
-          background: "rgba(2, 4, 10, 0.85)",
-          backdropFilter: "blur(8px)",
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "center",
+          background: "rgba(2, 4, 10, 0.88)",
+          backdropFilter: "blur(10px)",
           zIndex: 9999,
-          padding: "40px 16px",
-          overflowY: "auto",
+          overflowY: "scroll",
           WebkitOverflowScrolling: "touch"
         }}>
-          
           <div style={{
-            background: "#0A1128",
-            border: "1px solid var(--border)",
-            borderRadius: 16,
-            width: "100%",
-            maxWidth: 480,
-            boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
-            position: "relative",
-            margin: "0 auto 40px"
+            display: "flex",
+            justifyContent: "center",
+            padding: "12px 12px 40px",
+            minHeight: "100%"
           }}>
-            
-            {/* Modal Header */}
             <div style={{
-              padding: "16px 20px",
-              borderBottom: "1px solid var(--border-light)",
+              background: "rgba(10, 17, 40, 0.98)",
+              border: "1px solid var(--border)",
+              borderRadius: 16,
+              width: "100%",
+              maxWidth: 480,
+              boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
               display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center"
+              flexDirection: "column",
+              alignSelf: "flex-start"
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <button 
-                  onClick={() => setModalType("none")} 
-                  style={{ 
-                    display: "inline-flex", 
-                    alignItems: "center", 
-                    gap: 6, 
-                    background: "rgba(255, 255, 255, 0.04)", 
-                    border: "1px solid rgba(255, 255, 255, 0.08)", 
-                    borderRadius: "100px", 
-                    padding: "6px 14px", 
-                    color: "var(--text-secondary)", 
-                    fontSize: "12px", 
-                    fontWeight: 600, 
-                    cursor: "pointer", 
-                    outline: "none",
-                    transition: "all 0.2s"
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
-                    e.currentTarget.style.borderColor = "var(--yellow)";
-                    e.currentTarget.style.color = "var(--yellow)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
-                    e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
-                    e.currentTarget.style.color = "var(--text-secondary)";
+              
+              {/* STICKY HEADER */}
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "14px 16px",
+                borderBottom: "1px solid var(--border-light)",
+                position: "sticky",
+                top: 0,
+                background: "rgba(10, 17, 40, 0.99)",
+                backdropFilter: "blur(16px)",
+                borderRadius: "16px 16px 0 0",
+                zIndex: 10
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setModalType("none")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "rgba(255, 255, 255, 0.06)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    borderRadius: "100px",
+                    padding: "7px 16px",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    outline: "none"
                   }}
                 >
-                  <ArrowLeft size={14} /> Back
+                  <ArrowLeft size={15} /> Back
                 </button>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{
@@ -1418,410 +1415,422 @@ export default function KycWalletHub() {
                       activeModalCoin.slice(0, 2)
                     )}
                   </div>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text-primary)" }}>
                     {modalType === "deposit" ? `Deposit ${activeModalCoin}` : `Withdraw ${activeModalCoin}`}
-                  </h3>
+                  </span>
                 </div>
-              </div>
-              <button 
-                onClick={() => setModalType("none")} 
-                style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", display: "flex", alignItems: "center" }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* DEPOSIT MODAL VIEW */}
-            {modalType === "deposit" && (
-              <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-                
-                {/* Select network */}
-                <div>
-                  <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>DEPOSIT NETWORK</label>
-                  <select 
-                    value={selectedNetwork} 
-                    onChange={e => setSelectedNetwork(e.target.value)}
-                    className="bn-select"
-                    style={{ width: "100%", height: 38 }}
-                  >
-                    {activeModalCoin === "USDT" ? (
-                      <>
-                        <option value="TRC20">TRX (TRC20) - Fast & Low Fee</option>
-                        <option value="ERC20">ETH (ERC20) - High Fee</option>
-                        <option value="SOL">SOL (Solana) - Superfast</option>
-                      </>
-                    ) : activeModalCoin === "BTC" ? (
-                      <option value="BTC">BTC Network</option>
-                    ) : activeModalCoin === "ETH" ? (
-                      <option value="ERC20">ETH (ERC20) network</option>
-                    ) : (
-                      <>
-                        <option value="ERC20">ERC-20 network</option>
-                        <option value="BSC">BNB Chain (BEP20)</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                {/* QR Code and Address Container */}
-                <div style={{
-                  background: "rgba(0,0,0,0.25)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 12,
-                  padding: 20,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 16
-                }}>
-                  {/* CSS Simulated QR Code */}
-                  <TechQRCode text={depositAddress} />
-
-                  <div style={{ width: "100%" }}>
-                    <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4, textAlign: "center" }}>
-                      DEPOSIT ACCOUNT ADDRESS ({selectedNetwork})
-                    </div>
-                    <div style={{
-                      display: "flex",
-                      alignItems: "center",
-                      background: "rgba(0,0,0,0.4)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      padding: "8px 12px",
-                      gap: 10
-                    }}>
-                      <span style={{ 
-                        fontFamily: "monospace", 
-                        fontSize: 11, 
-                        color: "var(--cyan)", 
-                        wordBreak: "break-all",
-                        flex: 1
-                      }}>
-                        {depositAddress}
-                      </span>
-                      <button 
-                        onClick={copyToClipboard}
-                        style={{ 
-                          background: copyFeedback ? "var(--green)" : "var(--bg-hover)", 
-                          border: "none", 
-                          color: copyFeedback ? "#000" : "var(--yellow)", 
-                          padding: 6, 
-                          borderRadius: 6,
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center"
-                        }}
-                      >
-                        <Copy size={12} />
-                      </button>
-                    </div>
-                    {copyFeedback && (
-                      <span style={{ color: "var(--green)", fontSize: 10, display: "block", textAlign: "center", marginTop: 4 }}>
-                        Address copied to clipboard successfully!
-                      </span>
-                    )}
-                  </div>
-                </div>
-
                 <button
-                  onClick={handleSyncDeposits}
-                  className="btn-outline"
+                  onClick={() => setModalType("none")}
+                  aria-label="Close"
                   style={{
-                    width: "100%",
-                    height: 38,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "50%",
+                    width: 32,
+                    height: 32,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    gap: 8,
-                    border: "1px solid var(--cyan)",
-                    color: "var(--cyan)",
+                    color: "var(--text-secondary)",
                     cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 700
+                    outline: "none"
                   }}
                 >
-                  <RefreshCw size={14} /> Synchronize Live Deposits
+                  <X size={16} />
                 </button>
-
-                {/* Instructions */}
-                <div style={{
-                  background: "rgba(245, 166, 35, 0.05)",
-                  border: "1px solid rgba(245, 166, 35, 0.15)",
-                  padding: 12,
-                  borderRadius: 8,
-                  fontSize: 11,
-                  color: "var(--text-secondary)",
-                  lineHeight: 1.4
-                }}>
-                  <strong style={{ color: "var(--yellow)", display: "block", marginBottom: 4 }}>Important Audit Notice:</strong>
-                  Send only {activeModalCoin} to this address using the {selectedNetwork} network. Sending other assets will cause permanent loss. Requires 2 validations.
-                </div>
-
-                <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-                  <button onClick={() => setModalType("none")} className="btn-outline" style={{ flex: 1 }}>Close Window</button>
-                  <Link href={`/trade?pair=${activeModalCoin}/USDT`} className="btn-yellow" style={{ flex: 1, textDecoration: "none", textAlign: "center", lineHeight: "38px", height: 38, padding: 0 }}>
-                    Enter Trading Desk
-                  </Link>
-                </div>
-
               </div>
-            )}
 
-            {/* WITHDRAW MODAL VIEW */}
-            {modalType === "withdraw" && (
-              <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-                
-                {/* 2FA Authenticator Challenge Screen overlay */}
-                {show2faOverlay ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "10px 0" }}>
-                    <div style={{ textAlign: "center", marginBottom: 12 }}>
-                      <Lock size={32} style={{ color: "var(--yellow)", margin: "0 auto 8px" }} />
-                      <h4 style={{ fontSize: 15, fontWeight: 800 }}>Audit Authentication Challenge</h4>
-                      <p style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-                        Confirm secure withdrawal of {withdrawAmount} {activeModalCoin}
-                      </p>
-                    </div>
-
-                    {/* Email verify code */}
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                        <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>EMAIL VERIFICATION CODE</label>
-                        <button 
-                          type="button" 
-                          onClick={handleSendEmailCode}
-                          disabled={emailCountdown > 0}
-                          style={{ background: "none", border: "none", color: "var(--cyan)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
-                        >
-                          {emailCountdown > 0 ? `Resend (${emailCountdown}s)` : "Get Code"}
-                        </button>
-                      </div>
-                      <div style={{ position: "relative" }}>
-                        <Mail size={14} style={{ position: "absolute", left: 12, top: 12, color: "var(--text-muted)" }} />
-                        <input 
-                          type="text" 
-                          maxLength={6} 
-                          placeholder="Enter 6-digit confirmation code" 
-                          className="bn-input bn-input-sm" 
-                          value={emailCode}
-                          onChange={e => setEmailCode(e.target.value.replace(/\D/g, ""))}
-                          style={{ paddingLeft: 34 }} 
-                        />
-                      </div>
-                    </div>
-
-                    {/* Mobile SMS OTP verify code */}
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                        <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>MOBILE SMS VERIFICATION CODE</label>
-                        <button 
-                          type="button" 
-                          onClick={handleSendSmsCode}
-                          disabled={smsCountdown > 0}
-                          style={{ background: "none", border: "none", color: "var(--cyan)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
-                        >
-                          {smsCountdown > 0 ? `Resend (${smsCountdown}s)` : "Get Code"}
-                        </button>
-                      </div>
-                      <input 
-                        type="tel" 
-                        placeholder="Enter phone number (e.g. 919999999999)" 
-                        className="bn-input bn-input-sm" 
-                        value={withdrawPhone}
-                        onChange={e => {
-                          setWithdrawPhone(e.target.value);
-                          localStorage.setItem("withdraw_phone", e.target.value);
-                        }}
-                        style={{ marginBottom: 8 }}
-                      />
-                      <div style={{ position: "relative" }}>
-                        <Smartphone size={14} style={{ position: "absolute", left: 12, top: 12, color: "var(--text-muted)" }} />
-                        <input 
-                          type="text" 
-                          maxLength={6} 
-                          placeholder="Enter 6-digit SMS OTP" 
-                          className="bn-input bn-input-sm" 
-                          value={smsCode}
-                          onChange={e => setSmsCode(e.target.value.replace(/\D/g, ""))}
-                          style={{ paddingLeft: 34 }} 
-                        />
-                      </div>
-                    </div>
-
-                    {/* Google Authenticator */}
-                    <div>
-                      <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>
-                        GOOGLE AUTHENTICATOR 2FA CODE
-                      </label>
-                      <div style={{ position: "relative" }}>
-                        <ShieldAlert size={14} style={{ position: "absolute", left: 12, top: 12, color: "var(--text-muted)" }} />
-                        <input 
-                          type="text" 
-                          maxLength={6} 
-                          placeholder="Enter 6-digit dynamic Authenticator key" 
-                          className="bn-input bn-input-sm" 
-                          value={authCode}
-                          onChange={e => setAuthCode(e.target.value.replace(/\D/g, ""))}
-                          style={{ paddingLeft: 34 }} 
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{
-                      background: "rgba(255, 23, 68, 0.05)",
-                      border: "1px solid rgba(255, 23, 68, 0.12)",
-                      padding: 10,
-                      borderRadius: 8,
-                      fontSize: 10,
-                      color: "var(--text-secondary)"
-                    }}>
-                      Ensure network correctness. Assets dispatched to incorrect recipient nodes cannot be refunded.
-                    </div>
-
-                    <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-                      <button type="button" onClick={() => setShow2faOverlay(false)} className="btn-outline" style={{ flex: 1 }}>Back</button>
-                      <button 
-                        type="button" 
-                        onClick={handleVerifyWithdrawal} 
-                        className="btn-yellow" 
-                        style={{ flex: 1 }}
-                        disabled={authCode.length < 6 || emailCode.length < 6 || smsCode.length < 6}
-                      >
-                        Confirm Dispatch
-                      </button>
-                    </div>
-
+              {/* DEPOSIT MODAL VIEW */}
+              {modalType === "deposit" && (
+                <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+                  
+                  {/* Select network */}
+                  <div>
+                    <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>DEPOSIT NETWORK</label>
+                    <select 
+                      value={selectedNetwork} 
+                      onChange={e => setSelectedNetwork(e.target.value)}
+                      className="bn-select"
+                      style={{ width: "100%", height: 38 }}
+                    >
+                      {activeModalCoin === "USDT" ? (
+                        <>
+                          <option value="TRC20">TRX (TRC20) - Fast & Low Fee</option>
+                          <option value="ERC20">ETH (ERC20) - High Fee</option>
+                          <option value="SOL">SOL (Solana) - Superfast</option>
+                        </>
+                      ) : activeModalCoin === "BTC" ? (
+                        <option value="BTC">BTC Network</option>
+                      ) : activeModalCoin === "ETH" ? (
+                        <option value="ERC20">ETH (ERC20) network</option>
+                      ) : (
+                        <>
+                          <option value="ERC20">ERC-20 network</option>
+                          <option value="BSC">BNB Chain (BEP20)</option>
+                        </>
+                      )}
+                    </select>
                   </div>
-                ) : (
-                  <form onSubmit={handleWithdrawalSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                    
-                    {/* Recipient Address */}
-                    <div>
-                      <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>RECIPIENT ADDRESS</label>
-                      <input 
-                        type="text" 
-                        className="bn-input" 
-                        placeholder="Enter target external blockchain wallet address"
-                        value={withdrawAddress}
-                        onChange={e => setWithdrawAddress(e.target.value)}
-                        required
-                      />
-                    </div>
 
-                    {/* Network selector */}
-                    <div>
-                      <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>WITHDRAWAL NETWORK</label>
-                      <select 
-                        value={selectedNetwork} 
-                        onChange={e => setSelectedNetwork(e.target.value)}
-                        className="bn-select"
-                        style={{ width: "100%", height: 38 }}
-                      >
-                        {activeModalCoin === "USDT" ? (
-                          <>
-                            <option value="TRC20">TRX (TRC20) - Arrival: ~2 min, Fee: 1.0 USDT</option>
-                            <option value="ERC20">ETH (ERC20) - Arrival: ~5 min, Fee: 8.5 USDT</option>
-                            <option value="SOL">SOL (Solana) - Arrival: ~1 min, Fee: 0.5 USDT</option>
-                          </>
-                        ) : activeModalCoin === "BTC" ? (
-                          <option value="BTC">BTC Blockchain Network - Fee: 0.0005 BTC</option>
-                        ) : activeModalCoin === "ETH" ? (
-                          <option value="ERC20">ETH (ERC20) - Fee: 0.005 ETH</option>
-                        ) : (
-                          <>
-                            <option value="ERC20">ERC-20 smart network - Fee: 10 {activeModalCoin}</option>
-                            <option value="BSC">BNB Chain (BEP20) - Fee: 0.5 {activeModalCoin}</option>
-                          </>
-                        )}
-                      </select>
-                    </div>
+                  {/* QR Code and Address Container */}
+                  <div style={{
+                    background: "rgba(0,0,0,0.25)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 12,
+                    padding: 20,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 16
+                  }}>
+                    {/* CSS Simulated QR Code */}
+                    <TechQRCode text={depositAddress} />
 
-                    {/* Amount Input */}
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                        <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>WITHDRAWAL AMOUNT</label>
-                        <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-                          Available: <strong>{assets.find(a => a.symbol === activeModalCoin)?.amount || 0} {activeModalCoin}</strong>
-                        </span>
+                    <div style={{ width: "100%" }}>
+                      <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4, textAlign: "center" }}>
+                        DEPOSIT ACCOUNT ADDRESS ({selectedNetwork})
                       </div>
-                      <div style={{ position: "relative" }}>
+                      <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        background: "rgba(0,0,0,0.4)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 8,
+                        padding: "8px 12px",
+                        gap: 10
+                      }}>
+                        <span style={{ 
+                          fontFamily: "monospace", 
+                          fontSize: 11, 
+                          color: "var(--cyan)", 
+                          wordBreak: "break-all",
+                          flex: 1
+                        }}>
+                          {depositAddress}
+                        </span>
+                        <button 
+                          onClick={copyToClipboard}
+                          style={{ 
+                            background: copyFeedback ? "var(--green)" : "var(--bg-hover)", 
+                            border: "none", 
+                            color: copyFeedback ? "#000" : "var(--yellow)", 
+                            padding: 6, 
+                            borderRadius: 6,
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center"
+                          }}
+                        >
+                          <Copy size={12} />
+                        </button>
+                      </div>
+                      {copyFeedback && (
+                        <span style={{ color: "var(--green)", fontSize: 10, display: "block", textAlign: "center", marginTop: 4 }}>
+                          Address copied to clipboard successfully!
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleSyncDeposits}
+                    className="btn-outline"
+                    style={{
+                      width: "100%",
+                      height: 38,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      border: "1px solid var(--cyan)",
+                      color: "var(--cyan)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontWeight: 700
+                    }}
+                  >
+                    <RefreshCw size={14} /> Synchronize Live Deposits
+                  </button>
+
+                  {/* Instructions */}
+                  <div style={{
+                    background: "rgba(245, 166, 35, 0.05)",
+                    border: "1px solid rgba(245, 166, 35, 0.15)",
+                    padding: 12,
+                    borderRadius: 8,
+                    fontSize: 11,
+                    color: "var(--text-secondary)",
+                    lineHeight: 1.4
+                  }}>
+                    <strong style={{ color: "var(--yellow)", display: "block", marginBottom: 4 }}>Important Audit Notice:</strong>
+                    Send only {activeModalCoin} to this address using the {selectedNetwork} network. Sending other assets will cause permanent loss. Requires 2 validations.
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                    <button onClick={() => setModalType("none")} className="btn-outline" style={{ flex: 1 }}>Close Window</button>
+                    <Link href={`/trade?pair=${activeModalCoin}/USDT`} className="btn-yellow" style={{ flex: 1, textDecoration: "none", textAlign: "center", lineHeight: "38px", height: 38, padding: 0 }}>
+                      Enter Trading Desk
+                    </Link>
+                  </div>
+
+                </div>
+              )}
+
+              {/* WITHDRAW MODAL VIEW */}
+              {modalType === "withdraw" && (
+                <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+                  
+                  {/* 2FA Authenticator Challenge Screen overlay */}
+                  {show2faOverlay ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "10px 0" }}>
+                      <div style={{ textAlign: "center", marginBottom: 12 }}>
+                        <Lock size={32} style={{ color: "var(--yellow)", margin: "0 auto 8px" }} />
+                        <h4 style={{ fontSize: 15, fontWeight: 800 }}>Audit Authentication Challenge</h4>
+                        <p style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                          Confirm secure withdrawal of {withdrawAmount} {activeModalCoin}
+                        </p>
+                      </div>
+
+                      {/* Email verify code */}
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                          <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>EMAIL VERIFICATION CODE</label>
+                          <button 
+                            type="button" 
+                            onClick={handleSendEmailCode}
+                            disabled={emailCountdown > 0}
+                            style={{ background: "none", border: "none", color: "var(--cyan)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+                          >
+                            {emailCountdown > 0 ? `Resend (${emailCountdown}s)` : "Get Code"}
+                          </button>
+                        </div>
+                        <div style={{ position: "relative" }}>
+                          <Mail size={14} style={{ position: "absolute", left: 12, top: 12, color: "var(--text-muted)" }} />
+                          <input 
+                            type="text" 
+                            maxLength={6} 
+                            placeholder="Enter 6-digit confirmation code" 
+                            className="bn-input bn-input-sm" 
+                            value={emailCode}
+                            onChange={e => setEmailCode(e.target.value.replace(/\D/g, ""))}
+                            style={{ paddingLeft: 34 }} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Mobile SMS OTP verify code */}
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                          <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>MOBILE SMS VERIFICATION CODE</label>
+                          <button 
+                            type="button" 
+                            onClick={handleSendSmsCode}
+                            disabled={smsCountdown > 0}
+                            style={{ background: "none", border: "none", color: "var(--cyan)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+                          >
+                            {smsCountdown > 0 ? `Resend (${smsCountdown}s)` : "Get Code"}
+                          </button>
+                        </div>
+                        <input 
+                          type="tel" 
+                          placeholder="Enter phone number (e.g. 919999999999)" 
+                          className="bn-input bn-input-sm" 
+                          value={withdrawPhone}
+                          onChange={e => {
+                            setWithdrawPhone(e.target.value);
+                            localStorage.setItem("withdraw_phone", e.target.value);
+                          }}
+                          style={{ marginBottom: 8 }}
+                        />
+                        <div style={{ position: "relative" }}>
+                          <Smartphone size={14} style={{ position: "absolute", left: 12, top: 12, color: "var(--text-muted)" }} />
+                          <input 
+                            type="text" 
+                            maxLength={6} 
+                            placeholder="Enter 6-digit SMS OTP" 
+                            className="bn-input bn-input-sm" 
+                            value={smsCode}
+                            onChange={e => setSmsCode(e.target.value.replace(/\D/g, ""))}
+                            style={{ paddingLeft: 34 }} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Google Authenticator */}
+                      <div>
+                        <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>
+                          GOOGLE AUTHENTICATOR 2FA CODE
+                        </label>
+                        <div style={{ position: "relative" }}>
+                          <ShieldAlert size={14} style={{ position: "absolute", left: 12, top: 12, color: "var(--text-muted)" }} />
+                          <input 
+                            type="text" 
+                            maxLength={6} 
+                            placeholder="Enter 6-digit dynamic Authenticator key" 
+                            className="bn-input bn-input-sm" 
+                            value={authCode}
+                            onChange={e => setAuthCode(e.target.value.replace(/\D/g, ""))}
+                            style={{ paddingLeft: 34 }} 
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{
+                        background: "rgba(255, 23, 68, 0.05)",
+                        border: "1px solid rgba(255, 23, 68, 0.12)",
+                        padding: 10,
+                        borderRadius: 8,
+                        fontSize: 10,
+                        color: "var(--text-secondary)"
+                      }}>
+                        Ensure network correctness. Assets dispatched to incorrect recipient nodes cannot be refunded.
+                      </div>
+
+                      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                        <button type="button" onClick={() => setShow2faOverlay(false)} className="btn-outline" style={{ flex: 1 }}>Back</button>
+                        <button 
+                          type="button" 
+                          onClick={handleVerifyWithdrawal} 
+                          className="btn-yellow" 
+                          style={{ flex: 1 }}
+                          disabled={authCode.length < 6 || emailCode.length < 6 || smsCode.length < 6}
+                        >
+                          Confirm Dispatch
+                        </button>
+                      </div>
+
+                    </div>
+                  ) : (
+                    <form onSubmit={handleWithdrawalSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                      
+                      {/* Recipient Address */}
+                      <div>
+                        <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>RECIPIENT ADDRESS</label>
                         <input 
                           type="text" 
                           className="bn-input" 
-                          placeholder="0.00"
-                          value={withdrawAmount}
-                          onChange={e => setWithdrawAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                          placeholder="Enter target external blockchain wallet address"
+                          value={withdrawAddress}
+                          onChange={e => setWithdrawAddress(e.target.value)}
                           required
                         />
-                        <button 
-                          type="button"
-                          onClick={() => setWithdrawAmount(String(assets.find(a => a.symbol === activeModalCoin)?.amount || 0))}
-                          style={{
-                            position: "absolute",
-                            right: 12,
-                            top: 11,
-                            background: "none",
-                            border: "none",
-                            color: "var(--yellow)",
-                            fontWeight: 800,
-                            fontSize: 12,
-                            cursor: "pointer"
-                          }}
+                      </div>
+
+                      {/* Network selector */}
+                      <div>
+                        <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>WITHDRAWAL NETWORK</label>
+                        <select 
+                          value={selectedNetwork} 
+                          onChange={e => setSelectedNetwork(e.target.value)}
+                          className="bn-select"
+                          style={{ width: "100%", height: 38 }}
                         >
-                          MAX
-                        </button>
+                          {activeModalCoin === "USDT" ? (
+                            <>
+                              <option value="TRC20">TRX (TRC20) - Arrival: ~2 min, Fee: 1.0 USDT</option>
+                              <option value="ERC20">ETH (ERC20) - Arrival: ~5 min, Fee: 8.5 USDT</option>
+                              <option value="SOL">SOL (Solana) - Arrival: ~1 min, Fee: 0.5 USDT</option>
+                            </>
+                          ) : activeModalCoin === "BTC" ? (
+                            <option value="BTC">BTC Blockchain Network - Fee: 0.0005 BTC</option>
+                          ) : activeModalCoin === "ETH" ? (
+                            <option value="ERC20">ETH (ERC20) - Fee: 0.005 ETH</option>
+                          ) : (
+                            <>
+                              <option value="ERC20">ERC-20 smart network - Fee: 10 {activeModalCoin}</option>
+                              <option value="BSC">BNB Chain (BEP20) - Fee: 0.5 {activeModalCoin}</option>
+                            </>
+                          )}
+                        </select>
                       </div>
-                    </div>
 
-                    {/* Transaction breakdown details */}
-                    <div style={{
-                      background: "rgba(0,0,0,0.15)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      padding: 12,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
-                      fontSize: 11
-                    }}>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: "var(--text-secondary)" }}>Transaction Network Fee:</span>
-                        <strong style={{ color: "var(--text-primary)" }}>
-                          {activeModalCoin === "USDT" ? "1.00 USDT" : activeModalCoin === "BTC" ? "0.0005 BTC" : "0.005 ETH"}
-                        </strong>
+                      {/* Amount Input */}
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                          <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>WITHDRAWAL AMOUNT</label>
+                          <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                            Available: <strong>{assets.find(a => a.symbol === activeModalCoin)?.amount || 0} {activeModalCoin}</strong>
+                          </span>
+                        </div>
+                        <div style={{ position: "relative" }}>
+                          <input 
+                            type="text" 
+                            className="bn-input" 
+                            placeholder="0.00"
+                            value={withdrawAmount}
+                            onChange={e => setWithdrawAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                            required
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => setWithdrawAmount(String(assets.find(a => a.symbol === activeModalCoin)?.amount || 0))}
+                            style={{
+                              position: "absolute",
+                              right: 12,
+                              top: 11,
+                              background: "none",
+                              border: "none",
+                              color: "var(--yellow)",
+                              fontWeight: 800,
+                              fontSize: 12,
+                              cursor: "pointer"
+                            }}
+                          >
+                            MAX
+                          </button>
+                        </div>
                       </div>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: "var(--text-secondary)" }}>Est. Received Amount:</span>
-                        <strong style={{ color: "var(--green)", fontSize: 13 }}>
-                          {Math.max(0, parseFloat(withdrawAmount || "0") - (activeModalCoin === "USDT" ? 1.00 : activeModalCoin === "BTC" ? 0.0005 : 0.005)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {activeModalCoin}
-                        </strong>
+
+                      {/* Transaction breakdown details */}
+                      <div style={{
+                        background: "rgba(0,0,0,0.15)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 8,
+                        padding: 12,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                        fontSize: 11
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ color: "var(--text-secondary)" }}>Transaction Network Fee:</span>
+                          <strong style={{ color: "var(--text-primary)" }}>
+                            {activeModalCoin === "USDT" ? "1.00 USDT" : activeModalCoin === "BTC" ? "0.0005 BTC" : "0.005 ETH"}
+                          </strong>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ color: "var(--text-secondary)" }}>Est. Received Amount:</span>
+                          <strong style={{ color: "var(--green)", fontSize: 13 }}>
+                            {Math.max(0, parseFloat(withdrawAmount || "0") - (activeModalCoin === "USDT" ? 1.00 : activeModalCoin === "BTC" ? 0.0005 : 0.005)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {activeModalCoin}
+                          </strong>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Submit Button */}
-                    <button 
-                      type="submit" 
-                      className="btn-yellow" 
-                      style={{ width: "100%", height: 42, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-                      disabled={!kycStatus.includes("Tier-2")}
-                    >
-                      <ArrowUpRight size={16} /> 
-                      {kycStatus.includes("Tier-2") ? "Execute Withdrawal Request" : "Identity Verification Required (KYC Step 2)"}
-                    </button>
-                    
-                    {!kycStatus.includes("Tier-2") && (
-                      <span style={{ color: "var(--red)", fontSize: 10, display: "block", textAlign: "center" }}>
-                        Please complete Tier-2 Biometric selfie validation inside KYC tab before executing withdrawals.
-                      </span>
-                    )}
+                      {/* Submit Button */}
+                      <button 
+                        type="submit" 
+                        className="btn-yellow" 
+                        style={{ width: "100%", height: 42, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+                        disabled={!kycStatus.includes("Tier-2")}
+                      >
+                        <ArrowUpRight size={16} /> 
+                        {kycStatus.includes("Tier-2") ? "Execute Withdrawal Request" : "Identity Verification Required (KYC Step 2)"}
+                      </button>
+                      
+                      {!kycStatus.includes("Tier-2") && (
+                        <span style={{ color: "var(--red)", fontSize: 10, display: "block", textAlign: "center" }}>
+                          Please complete Tier-2 Biometric selfie validation inside KYC tab before executing withdrawals.
+                        </span>
+                      )}
 
-                  </form>
-                )}
+                    </form>
+                  )}
 
-              </div>
-            )}
+                </div>
+              )}
 
+            </div>
           </div>
-
         </div>
       )}
 

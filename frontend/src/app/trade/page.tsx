@@ -552,12 +552,14 @@ export default function TradePage() {
 
     if (isHalted) return;
 
+    let active = true;
     let fallbackInterval: any = null;
     let ws: WebSocket | null = null;
     let isWsConnected = false;
 
     // Price Update Core Logic
     const onPriceUpdate = (np: number) => {
+      if (!active) return;
       setPrice(np);
 
       // 1. Update chart's latest candle
@@ -716,9 +718,14 @@ export default function TradePage() {
 
     // Setup Fallback Simulator
     const startFallbackSimulator = (startingPrice: number) => {
+      if (!active) return;
       if (fallbackInterval) clearInterval(fallbackInterval);
       let currentPrice = startingPrice;
       fallbackInterval = setInterval(() => {
+        if (!active) {
+          clearInterval(fallbackInterval);
+          return;
+        }
         const delta = (Math.random() - 0.485) * (startingPrice * 0.00035);
         const decimals = startingPrice < 0.0001 ? 8 : startingPrice < 1 ? 6 : startingPrice < 10 ? 4 : 2;
         const minPrice = startingPrice < 0.0001 ? 0.00000001 : startingPrice < 1 ? 0.000001 : 0.01;
@@ -737,6 +744,10 @@ export default function TradePage() {
     try {
       ws = new WebSocket(`wss://stream.binance.com:9443/ws/${cleanSym}@ticker`);
       ws.onopen = () => {
+        if (!active) {
+          if (ws) ws.close();
+          return;
+        }
         isWsConnected = true;
         if (fallbackInterval) {
           clearInterval(fallbackInterval);
@@ -745,6 +756,7 @@ export default function TradePage() {
       };
 
       ws.onmessage = (event) => {
+        if (!active) return;
         try {
           const json = JSON.parse(event.data);
           if (json && json.c) {
@@ -757,11 +769,13 @@ export default function TradePage() {
       };
 
       ws.onerror = () => {
+        if (!active) return;
         isWsConnected = false;
         startFallbackSimulator(activePair.price);
       };
 
       ws.onclose = () => {
+        if (!active) return;
         isWsConnected = false;
         startFallbackSimulator(activePair.price);
       };
@@ -771,7 +785,14 @@ export default function TradePage() {
     }
 
     return () => {
-      if (ws) ws.close();
+      active = false;
+      if (ws) {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+        ws.close();
+      }
       if (fallbackInterval) clearInterval(fallbackInterval);
     };
   }, [activePair, isHalted, timeframe]);
