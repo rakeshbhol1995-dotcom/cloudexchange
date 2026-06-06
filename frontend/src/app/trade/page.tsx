@@ -363,8 +363,9 @@ export default function TradePage() {
       setTradingPairs(combined);
     }
 
-    // Set default order price when active pair changes
+    // Set default order price and price ticker when active pair changes
     setOrderPrice(String(activePair.price));
+    setPrice(activePair.price);
   }, [activePair]);
 
   // Wallet balance, api keys, and halt status sync via storage event listener
@@ -1653,7 +1654,7 @@ export default function TradePage() {
           
           {isLoggedIn ? (
             <>
-              <Link href="/kyc" className="btn-yellow bn-tab-sm" style={{ padding: "6px 12px", fontSize: 11, display: "flex", alignItems: "center", gap: 6, textDecoration: "none", fontWeight: 700 }}>
+              <Link href={`/kyc?tab=wallet&action=deposit&coin=${activePair.symbol.split("/")[0]}`} className="btn-yellow bn-tab-sm" style={{ padding: "6px 12px", fontSize: 11, display: "flex", alignItems: "center", gap: 6, textDecoration: "none", fontWeight: 700 }}>
                 ⚡ Deposit Crypto
               </Link>
               <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(255,255,255,0.03)", padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border)" }}>

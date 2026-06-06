@@ -23,7 +23,8 @@ import {
   TrendingUp,
   ShieldAlert,
   Coins,
-  Smartphone
+  Smartphone,
+  ArrowLeft
 } from "lucide-react";
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
@@ -118,7 +119,7 @@ export default function KycWalletHub() {
   const [kycStatus, setKycStatus] = useState("Tier-1 Basic (Email Verified)");
   
   // Navigation Tabs: "all-coins", "wallet", or "kyc"
-  const [activeTab, setActiveTab] = useState<"all-coins" | "wallet" | "kyc">("all-coins");
+  const [activeTab, setActiveTab] = useState<"all-coins" | "wallet" | "kyc">("wallet");
 
   // Wallet and Assets State
   const [assetSearch, setAssetSearch] = useState("");
@@ -485,6 +486,25 @@ export default function KycWalletHub() {
     setShow2faOverlay(false);
     setSelectedNetwork(coin === "USDT" ? "TRC20" : "ERC20");
   };
+
+  // Parse URL search parameters to automatically switch tabs or trigger deposit/withdrawal modal
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (tabParam === "wallet" || tabParam === "kyc") {
+        setActiveTab(tabParam as any);
+      }
+      
+      const actionParam = params.get("action");
+      const coinParam = params.get("coin");
+      if (actionParam === "deposit" && coinParam) {
+        openModal("deposit", coinParam.toUpperCase());
+      } else if (actionParam === "withdraw" && coinParam) {
+        openModal("withdraw", coinParam.toUpperCase());
+      }
+    }
+  }, []);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(depositAddress);
@@ -1317,13 +1337,14 @@ export default function KycWalletHub() {
         <div style={{
           position: "fixed",
           inset: 0,
-          background: "rgba(2, 4, 10, 0.8)",
+          background: "rgba(2, 4, 10, 0.85)",
           backdropFilter: "blur(8px)",
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "center",
           zIndex: 9999,
-          padding: 16
+          padding: "40px 16px",
+          overflowY: "auto"
         }}>
           
           <div style={{
@@ -1332,9 +1353,9 @@ export default function KycWalletHub() {
             borderRadius: 16,
             width: "100%",
             maxWidth: 480,
-            overflow: "hidden",
             boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
-            position: "relative"
+            position: "relative",
+            margin: "auto"
           }}>
             
             {/* Modal Header */}
@@ -1345,33 +1366,65 @@ export default function KycWalletHub() {
               justifyContent: "space-between",
               alignItems: "center"
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: "50%",
-                  background: activeModalCoin === "GOLD" ? "transparent" : (assets.find(a => a.symbol === activeModalCoin)?.color || "var(--yellow)"),
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 9,
-                  fontWeight: 900,
-                  color: "#fff",
-                  overflow: "hidden"
-                }}>
-                  {activeModalCoin === "GOLD" ? (
-                    <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  ) : (
-                    activeModalCoin.slice(0, 2)
-                  )}
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <button 
+                  onClick={() => setModalType("none")} 
+                  style={{ 
+                    display: "inline-flex", 
+                    alignItems: "center", 
+                    gap: 6, 
+                    background: "rgba(255, 255, 255, 0.04)", 
+                    border: "1px solid rgba(255, 255, 255, 0.08)", 
+                    borderRadius: "100px", 
+                    padding: "6px 14px", 
+                    color: "var(--text-secondary)", 
+                    fontSize: "12px", 
+                    fontWeight: 600, 
+                    cursor: "pointer", 
+                    outline: "none",
+                    transition: "all 0.2s"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+                    e.currentTarget.style.borderColor = "var(--yellow)";
+                    e.currentTarget.style.color = "var(--yellow)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+                    e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                    e.currentTarget.style.color = "var(--text-secondary)";
+                  }}
+                >
+                  <ArrowLeft size={14} /> Back
+                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: "50%",
+                    background: activeModalCoin === "GOLD" ? "transparent" : (assets.find(a => a.symbol === activeModalCoin)?.color || "var(--yellow)"),
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 8,
+                    fontWeight: 900,
+                    color: "#fff",
+                    overflow: "hidden"
+                  }}>
+                    {activeModalCoin === "GOLD" ? (
+                      <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      activeModalCoin.slice(0, 2)
+                    )}
+                  </div>
+                  <h3 style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>
+                    {modalType === "deposit" ? `Deposit ${activeModalCoin}` : `Withdraw ${activeModalCoin}`}
+                  </h3>
                 </div>
-                <h3 style={{ fontSize: 16, fontWeight: 800 }}>
-                  {modalType === "deposit" ? `Deposit ${activeModalCoin} Crypto` : `Withdraw ${activeModalCoin} Assets`}
-                </h3>
               </div>
               <button 
                 onClick={() => setModalType("none")} 
-                style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}
+                style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", display: "flex", alignItems: "center" }}
               >
                 <X size={18} />
               </button>
