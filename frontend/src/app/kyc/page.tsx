@@ -1344,7 +1344,8 @@ export default function KycWalletHub() {
           justifyContent: "center",
           zIndex: 9999,
           padding: "40px 16px",
-          overflowY: "auto"
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch"
         }}>
           
           <div style={{
@@ -1355,7 +1356,7 @@ export default function KycWalletHub() {
             maxWidth: 480,
             boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
             position: "relative",
-            margin: "auto"
+            margin: "0 auto 40px"
           }}>
             
             {/* Modal Header */}
