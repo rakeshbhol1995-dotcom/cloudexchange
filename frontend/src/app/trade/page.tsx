@@ -825,14 +825,11 @@ export default function TradePage() {
         setCandleWidth(prev => Math.max(3, prev - 1));
       }
     };
-
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     return () => {
       canvas.removeEventListener("wheel", handleWheel);
     };
-  }, []);
-
-  // Render 2D Chart
+  }, []);  // Render 2D Chart (DexScreener styled with dynamic price formatting)
   useEffect(() => {
     const canvas = canvas2dRef.current; if (!canvas) return;
     const ctx = canvas.getContext("2d"); if (!ctx) return;
@@ -850,12 +847,18 @@ export default function TradePage() {
 
     ctx.clearRect(0, 0, W, H);
 
+    // Magnitude-aware Price Formatter Helper
+    const formatPrice = (p: number) => {
+      if (p === 0) return "0.00";
+      if (p < 0.0001) return p.toFixed(8);
+      if (p < 1) return p.toFixed(6);
+      if (p < 10) return p.toFixed(4);
+      if (p < 100) return p.toFixed(3);
+      return p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
     
-    // Background Gradient (Sleek Space-Navy design)
-    const gradient = ctx.createLinearGradient(0, 0, 0, H);
-    gradient.addColorStop(0, "#080f26");
-    gradient.addColorStop(1, "#03050c");
-    ctx.fillStyle = gradient;
+    // Background Solid Dark (DexScreener style)
+    ctx.fillStyle = "#07080d";
     ctx.fillRect(0, 0, W, H);
 
     const paddingRight = W < 600 ? 55 : 75;
@@ -864,9 +867,10 @@ export default function TradePage() {
     const plotW = W - paddingRight;
     const plotH = H - paddingBottom - paddingTop;
 
-    // Grid Lines (TradingView Style)
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
+    // Grid Lines (DexScreener Dotted Style)
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.035)";
     ctx.lineWidth = 1;
+    ctx.setLineDash([2, 4]); // Dotted grid lines
     const gridCols = 8;
     const gridRows = 6;
     for (let i = 1; i < gridRows; i++) {
@@ -883,6 +887,7 @@ export default function TradePage() {
       ctx.lineTo(x, H - paddingBottom);
       ctx.stroke();
     }
+    ctx.setLineDash([]); // Reset line dash
 
     if (chartData.length === 0) return;
 
@@ -919,9 +924,18 @@ export default function TradePage() {
       return sum / count;
     });
 
+    const ma99Values = chartData.map((c, i) => {
+      let sum = 0;
+      let count = 0;
+      for (let j = Math.max(0, i - 98); j <= i; j++) {
+        sum += chartData[j].close;
+        count++;
+      }
+      return sum / count;
+    });
+
     // Helper to map index in visible list to screen X coordinate
     const getXCoordinate = (idx: number) => {
-      // Right-aligned with a small margin of 10px from the axis border
       return plotW - 10 - (visibleCandles.length - 1 - idx) * (candleWidth + 2);
     };
 
@@ -930,28 +944,29 @@ export default function TradePage() {
       return H - paddingBottom - ((priceVal - min) / range) * plotH;
     };
 
-    // 1. Draw Volume Bars at bottom (height: 40px max)
+    // 1. Draw Volume Bars at bottom (translucent so they sit subtly in background)
     const maxVol = Math.max(...visibleCandles.map(c => c.volume)) || 1;
-    const volPlotH = 45;
+    const volPlotH = 40;
     visibleCandles.forEach((c, idx) => {
       const x = getXCoordinate(idx);
       const volH = (c.volume / maxVol) * volPlotH;
       const isGreen = c.close >= c.open;
-      ctx.fillStyle = isGreen ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)";
+      ctx.fillStyle = isGreen ? "rgba(14, 203, 129, 0.08)" : "rgba(246, 70, 93, 0.08)";
       const barW = Math.max(1, candleWidth * 0.75);
       ctx.fillRect(x - barW / 2, H - paddingBottom - volH, barW, volH);
     });
 
-    // 2. Draw 7-Period & 25-Period Moving Averages
+    // 2. Draw Moving Averages (MA7, MA25, MA99) as glowing tracer lines
     const drawMA = (maVals: number[], color: string) => {
       ctx.beginPath();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.2;
       ctx.lineJoin = "round";
       let first = true;
       visibleCandles.forEach((c, idx) => {
         const origIdx = startIndex + idx;
         const maVal = maVals[origIdx];
+        if (isNaN(maVal)) return;
         const x = getXCoordinate(idx);
         const maY = getYCoordinate(maVal);
 
@@ -964,8 +979,9 @@ export default function TradePage() {
       });
       ctx.stroke();
     };
-    drawMA(ma7Values, "#eab308"); // MA7 Gold/Yellow
-    drawMA(ma25Values, "#c084fc"); // MA25 Light Purple
+    drawMA(ma7Values, "#00f0ff");  // MA7 Neon Blue
+    drawMA(ma25Values, "#ff00a0"); // MA25 Neon Pink
+    drawMA(ma99Values, "#eab308"); // MA99 Neon Yellow
 
     // 3. Draw Candlesticks or Line chart
     if (chartType === "Candles") {
@@ -979,7 +995,7 @@ export default function TradePage() {
         const lowY = getYCoordinate(c.low);
 
         // Draw Wick Line
-        ctx.strokeStyle = isGreen ? "#10b981" : "#ef4444";
+        ctx.strokeStyle = isGreen ? "#0ecb81" : "#f6465d";
         ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.moveTo(x, highY);
@@ -987,26 +1003,20 @@ export default function TradePage() {
         ctx.stroke();
 
         // Draw Candle Body
-        ctx.fillStyle = isGreen ? "#10b981" : "#ef4444";
+        ctx.fillStyle = isGreen ? "#0ecb81" : "#f6465d";
         const bodyW = Math.max(1, candleWidth * 0.75);
         const bodyH = Math.abs(closeY - openY) || 1.2;
         ctx.fillRect(x - bodyW / 2, Math.min(closeY, openY), bodyW, bodyH);
-        
-        // Draw border stroke for extra sharpness
-        ctx.strokeStyle = isGreen ? "#059669" : "#dc2626";
-        ctx.lineWidth = 0.8;
-        ctx.strokeRect(x - bodyW / 2, Math.min(closeY, openY), bodyW, bodyH);
       });
     } else {
-      // Line chart mode — smooth glowing price line with area fill
+      // Line chart mode with neon area fill
       const pts = visibleCandles.map((c, idx) => ({ x: getXCoordinate(idx), y: getYCoordinate(c.close) }));
 
       if (pts.length > 1) {
-        // Area fill under the line
+        // Area fill
         const areaGrad = ctx.createLinearGradient(0, paddingTop, 0, H - paddingBottom);
-        areaGrad.addColorStop(0, "rgba(0, 229, 255, 0.18)");
-        areaGrad.addColorStop(0.6, "rgba(0, 229, 255, 0.05)");
-        areaGrad.addColorStop(1, "rgba(0, 229, 255, 0)");
+        areaGrad.addColorStop(0, "rgba(0, 240, 255, 0.15)");
+        areaGrad.addColorStop(1, "rgba(0, 240, 255, 0)");
         ctx.beginPath();
         ctx.moveTo(pts[0].x, H - paddingBottom);
         pts.forEach(p => ctx.lineTo(p.x, p.y));
@@ -1016,59 +1026,57 @@ export default function TradePage() {
         ctx.fill();
 
         // Glowing price line
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = "rgba(0, 229, 255, 0.6)";
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = "rgba(0, 240, 255, 0.5)";
         ctx.beginPath();
-        ctx.strokeStyle = "#00e5ff";
+        ctx.strokeStyle = "#00f0ff";
         ctx.lineWidth = 2;
         ctx.lineJoin = "round";
         ctx.moveTo(pts[0].x, pts[0].y);
         pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
         ctx.stroke();
-        ctx.shadowBlur = 0;
+        ctx.shadowBlur = 0; // Reset
       }
     }
 
-    // 4. Horizontal Current Price Tracker Line (drawn using the latest live candle)
+    // 4. Horizontal Live Price Tracker Line
     const latestCandle = chartData[chartData.length - 1];
     if (latestCandle) {
-      const latestCloseY = getYCoordinate(latestCandle.close);
-      if (latestCloseY >= paddingTop && latestCloseY <= H - paddingBottom) {
+      const curPrice = latestCandle.close;
+      const liveY = getYCoordinate(curPrice);
+      if (liveY >= paddingTop && liveY <= H - paddingBottom) {
         ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = latestCandle.close >= latestCandle.open ? "rgba(16, 185, 129, 0.45)" : "rgba(239, 68, 68, 0.45)";
+        ctx.strokeStyle = latestCandle.close >= latestCandle.open ? "rgba(14, 203, 129, 0.45)" : "rgba(246, 70, 93, 0.45)";
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(0, latestCloseY);
-        ctx.lineTo(plotW, latestCloseY);
+        ctx.moveTo(0, liveY);
+        ctx.lineTo(plotW, liveY);
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Pulsing dot on live price coordinate
-        // Find if the latest candle is visible
+        // Live dot on chart
         if (scrollOffset < maxVisibleCandles) {
           const liveX = getXCoordinate(visibleCandles.length - 1);
-          ctx.fillStyle = latestCandle.close >= latestCandle.open ? "#10b981" : "#ef4444";
+          ctx.fillStyle = latestCandle.close >= latestCandle.open ? "#0ecb81" : "#f6465d";
           ctx.beginPath();
-          ctx.arc(liveX, latestCloseY, 3.5, 0, Math.PI * 2);
+          ctx.arc(liveX, liveY, 4, 0, Math.PI * 2);
           ctx.fill();
         }
       }
     }
 
-    // 5. Border Lines for Axis Separation
+    // 5. Border Lines
     ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    // Vertical axis split line
     ctx.moveTo(plotW, 0);
     ctx.lineTo(plotW, H);
-    // Horizontal axis split line
     ctx.moveTo(0, H - paddingBottom);
     ctx.lineTo(W, H - paddingBottom);
     ctx.stroke();
 
-    // 6. Right Price Scale Axis values
-    ctx.fillStyle = "rgba(4, 8, 20, 0.45)";
+    // 6. Right Price Scale Axis values (Formatted properly)
+    ctx.fillStyle = "rgba(6, 11, 22, 0.6)";
     ctx.fillRect(plotW + 1, 0, paddingRight - 1, H - paddingBottom);
     
     ctx.fillStyle = "#94a3b8";
@@ -1077,21 +1085,21 @@ export default function TradePage() {
     for (let i = 0; i <= 5; i++) {
       const val = min + (i / 5) * range;
       const y = H - paddingBottom - (i / 5) * plotH;
-      ctx.fillText(val < 2 ? val.toFixed(4) : val.toLocaleString(undefined, { maximumFractionDigits: 2 }), plotW + 8, y + 4);
+      ctx.fillText(formatPrice(val), plotW + 6, y + 4);
     }
 
     // Live Price indicator on Axis
     if (latestCandle) {
       const curPrice = latestCandle.close;
       const liveY = getYCoordinate(curPrice);
-      ctx.fillStyle = latestCandle.close >= latestCandle.open ? "#10b981" : "#ef4444";
+      ctx.fillStyle = latestCandle.close >= latestCandle.open ? "#0ecb81" : "#f6465d";
       ctx.fillRect(plotW + 2, liveY - 8, paddingRight - 4, 16);
       ctx.fillStyle = "#fff";
       ctx.font = "bold 9px monospace";
-      ctx.fillText(curPrice < 2 ? curPrice.toFixed(4) : Math.round(curPrice).toLocaleString(), plotW + 6, liveY + 3);
+      ctx.fillText(formatPrice(curPrice), plotW + 4, liveY + 3);
     }
 
-    // Helper to format simulated timestamps for Bottom Axis
+    // Bottom time axis formatter
     const getSimulatedTime = (c: Candle) => {
       const t = new Date(c.time);
       if (timeframe === "1D") {
@@ -1100,7 +1108,7 @@ export default function TradePage() {
       return t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
     };
 
-    // 7. Time Labels at bottom (5 markers spacing)
+    // 7. Time Labels
     ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
     ctx.font = "10px Outfit, sans-serif";
     ctx.textAlign = "center";
@@ -1114,10 +1122,10 @@ export default function TradePage() {
       }
     }
 
-    // 8. Draw interactive crosshair, HUD, and axis badges on hover
+    // 8. Interactive Crosshair, HUD and Hover Cues
     if (mousePos && mousePos.x < plotW && mousePos.y > paddingTop && mousePos.y < H - paddingBottom) {
       ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
       ctx.lineWidth = 1;
 
       // Horizontal cursor crosshair
@@ -1142,74 +1150,87 @@ export default function TradePage() {
       if (c) {
         const x = getXCoordinate(closestIdx);
         
-        // Vertical cursor crosshair (aligned exactly to candle center)
+        // Vertical cursor crosshair
         ctx.beginPath();
         ctx.moveTo(x, paddingTop);
         ctx.lineTo(x, H - paddingBottom);
         ctx.stroke();
         ctx.setLineDash([]);
 
+        // Interactive halo circle on Close price of hovered candle
+        const hoveredCloseY = getYCoordinate(c.close);
+        ctx.fillStyle = c.close >= c.open ? "#0ecb81" : "#f6465d";
+        ctx.beginPath();
+        ctx.arc(x, hoveredCloseY, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(x, hoveredCloseY, 7, 0, Math.PI * 2);
+        ctx.stroke();
+
         // Hover Price Badge on Right Axis
         const hoveredPrice = min + ((H - paddingBottom - mousePos.y) / plotH) * range;
-        ctx.fillStyle = "#fcd535";
+        ctx.fillStyle = "#eab308";
         ctx.fillRect(plotW + 2, mousePos.y - 8, paddingRight - 4, 16);
         ctx.fillStyle = "#000";
         ctx.font = "bold 9px monospace";
         ctx.textAlign = "left";
-        ctx.fillText(hoveredPrice < 2 ? hoveredPrice.toFixed(4) : hoveredPrice.toLocaleString(undefined, { maximumFractionDigits: 2 }), plotW + 6, mousePos.y + 3);
+        ctx.fillText(formatPrice(hoveredPrice), plotW + 4, mousePos.y + 3);
 
         // Hover Time Badge on Bottom Axis
-        ctx.fillStyle = "#fcd535";
+        ctx.fillStyle = "#eab308";
         ctx.fillRect(x - 22, H - paddingBottom + 2, 44, 16);
         ctx.fillStyle = "#000";
         ctx.font = "bold 9px sans-serif";
         ctx.textAlign = "center";
         ctx.fillText(getSimulatedTime(c), x, H - paddingBottom + 13);
 
-        // Full Candlestick Data Info Overlay (HUD) at top left
+        // HUD Overlay at top
         const diffPercent = ((c.close - c.open) / c.open) * 100;
-        ctx.fillStyle = "rgba(10, 17, 40, 0.9)";
+        ctx.fillStyle = "rgba(10, 15, 30, 0.9)";
         ctx.fillRect(5, 5, plotW - 10, 20);
         
         ctx.font = "bold 11px Outfit, sans-serif";
         ctx.textAlign = "left";
-        ctx.fillStyle = "#fcd535";
+        ctx.fillStyle = "#eab308";
         ctx.fillText(`${activePair.symbol} (${timeframe})`, 10, 18);
         
         ctx.font = "10px monospace";
         ctx.fillStyle = "rgba(255,255,255,0.55)";
         ctx.fillText("O:", 120, 18);
         ctx.fillStyle = c.close >= c.open ? "#0ecb81" : "#f6465d";
-        ctx.fillText(c.open.toLocaleString(undefined, { maximumFractionDigits: 4 }), 132, 18);
+        ctx.fillText(formatPrice(c.open), 132, 18);
 
         ctx.fillStyle = "rgba(255,255,255,0.55)";
-        ctx.fillText("H:", 200, 18);
+        ctx.fillText("H:", 210, 18);
         ctx.fillStyle = c.close >= c.open ? "#0ecb81" : "#f6465d";
-        ctx.fillText(c.high.toLocaleString(undefined, { maximumFractionDigits: 4 }), 212, 18);
+        ctx.fillText(formatPrice(c.high), 222, 18);
 
         ctx.fillStyle = "rgba(255,255,255,0.55)";
-        ctx.fillText("L:", 280, 18);
+        ctx.fillText("L:", 300, 18);
         ctx.fillStyle = c.close >= c.open ? "#0ecb81" : "#f6465d";
-        ctx.fillText(c.low.toLocaleString(undefined, { maximumFractionDigits: 4 }), 292, 18);
+        ctx.fillText(formatPrice(c.low), 312, 18);
 
         ctx.fillStyle = "rgba(255,255,255,0.55)";
-        ctx.fillText("C:", 360, 18);
+        ctx.fillText("C:", 390, 18);
         ctx.fillStyle = c.close >= c.open ? "#0ecb81" : "#f6465d";
-        ctx.fillText(c.close.toLocaleString(undefined, { maximumFractionDigits: 4 }), 372, 18);
+        ctx.fillText(formatPrice(c.close), 402, 18);
 
         ctx.fillStyle = "rgba(255,255,255,0.55)";
-        ctx.fillText("Chg:", 445, 18);
+        ctx.fillText("Chg:", 480, 18);
         ctx.fillStyle = c.close >= c.open ? "#0ecb81" : "#f6465d";
-        ctx.fillText(`${diffPercent >= 0 ? "+" : ""}${diffPercent.toFixed(2)}%`, 470, 18);
+        ctx.fillText(`${diffPercent >= 0 ? "+" : ""}${diffPercent.toFixed(2)}%`, 505, 18);
       }
     } else {
-      // Default HUD showing active pair info when not hovering
-      ctx.fillStyle = "rgba(10, 17, 40, 0.5)";
+      // Default HUD
+      ctx.fillStyle = "rgba(10, 15, 30, 0.65)";
       ctx.fillRect(5, 5, 230, 20);
       ctx.font = "bold 11px Outfit, sans-serif";
-      ctx.fillStyle = "#fcd535";
+      ctx.fillStyle = "#eab308";
       ctx.textAlign = "left";
-      ctx.fillText(`${activePair.symbol} • ${timeframe} • Live Market Feed`, 10, 18);
+      ctx.fillText(`${activePair.symbol} • ${timeframe} • Live Feed`, 10, 18);
     }
   }, [chartData, chartType, mousePos, timeframe, activePair, candleWidth, scrollOffset, canvasSize]);
 
