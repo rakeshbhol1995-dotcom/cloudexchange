@@ -233,7 +233,7 @@ function generateBook(center: number): { bids: OrderLevel[]; asks: OrderLevel[] 
 export default function TradePage() {
   const [activePair, setActivePair] = useState(PAIRS[0]);
   const [tradingPairs, setTradingPairs] = useState(PAIRS);
-  const [price, setPrice] = useState(65050);
+  const [price, setPrice] = useState(PAIRS[0].price);
   const [bids, setBids] = useState<OrderLevel[]>([]);
   const [asks, setAsks] = useState<OrderLevel[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -245,7 +245,7 @@ export default function TradePage() {
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   
   // Form fields
-  const [orderPrice, setOrderPrice] = useState("65050");
+  const [orderPrice, setOrderPrice] = useState(String(PAIRS[0].price));
   const [orderQty, setOrderQty] = useState("");
   const [stopPrice, setStopPrice] = useState("");
   const [takeProfitPrice, setTakeProfitPrice] = useState("");
@@ -1797,8 +1797,8 @@ export default function TradePage() {
           </div>
 
           <div className="ob-header">
-            <span>Price(USDT)</span>
-            <span style={{ textAlign: "center" }}>Size(BTC)</span>
+            <span>Price({activePair.symbol.split("/")[1] || "USDT"})</span>
+            <span style={{ textAlign: "center" }}>Size({activePair.symbol.split("/")[0]})</span>
             <span style={{ textAlign: "right" }}>Total</span>
           </div>
 
@@ -2243,8 +2243,8 @@ export default function TradePage() {
           <div style={{ height: 220, borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: "8px 16px", fontSize: 11, fontWeight: 700, borderBottom: "1px solid var(--border-light)" }}>Market Trades</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", padding: "4px 16px", borderBottom: "1px solid var(--border-light)", fontSize: 9, color: "var(--text-muted)" }}>
-              <span>Price(USDT)</span>
-              <span style={{ textAlign: "center" }}>Qty</span>
+              <span>Price({activePair.symbol.split("/")[1] || "USDT"})</span>
+              <span style={{ textAlign: "center" }}>Qty({activePair.symbol.split("/")[0]})</span>
               <span style={{ textAlign: "right" }}>Time</span>
             </div>
             <div style={{ flex: 1, overflowY: "auto" }}>

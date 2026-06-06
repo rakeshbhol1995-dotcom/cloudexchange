@@ -1108,20 +1108,22 @@ export default function CoinsPage() {
           alignItems: "flex-start",
           justifyContent: "center",
           zIndex: 1000,
-          padding: "40px 20px",
+          padding: "16px 12px",
           overflowY: "auto",
           WebkitOverflowScrolling: "touch"
         }}>
           <div style={{
-            background: "rgba(10, 17, 40, 0.95)",
+            background: "rgba(10, 17, 40, 0.98)",
             border: "1px solid var(--border)",
             borderRadius: 16,
             width: "100%",
             maxWidth: 460,
-            padding: 24,
+            padding: 20,
             position: "relative",
             boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
-            margin: "0 auto 40px"
+            margin: "0 auto 16px",
+            maxHeight: "calc(100vh - 32px)",
+            overflowY: "auto"
           }}>
             {/* Top-Right Close Button for Mobile Accessibility */}
             <button 
@@ -1313,6 +1315,34 @@ export default function CoinsPage() {
               <div style={{ background: "rgba(235, 94, 40, 0.08)", border: "1px solid rgba(235, 94, 40, 0.2)", borderRadius: 8, padding: 12, fontSize: 11, color: "var(--yellow)" }}>
                 ⚠️ Send only {activeModalCoin} on {selectedNetwork} network to this address. Sending other assets will result in permanent loss.
               </div>
+
+              {/* Bottom Navigation Buttons for Mobile/Desktop Quick Close */}
+              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                <button 
+                  type="button" 
+                  onClick={() => setModalType("none")} 
+                  className="btn-outline" 
+                  style={{ flex: 1, height: 40, cursor: "pointer", fontSize: 12, fontWeight: 700 }}
+                >
+                  Close &amp; Go Back
+                </button>
+                <Link 
+                  href={`/trade?pair=${activeModalCoin}/USDT`} 
+                  className="btn-yellow" 
+                  style={{ 
+                    flex: 1, 
+                    textDecoration: "none", 
+                    textAlign: "center", 
+                    lineHeight: "40px", 
+                    height: 40, 
+                    padding: 0, 
+                    fontSize: 12, 
+                    fontWeight: 700 
+                  }}
+                >
+                  Enter Trading Desk
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -1329,20 +1359,22 @@ export default function CoinsPage() {
           alignItems: "flex-start",
           justifyContent: "center",
           zIndex: 1000,
-          padding: "40px 20px",
+          padding: "16px 12px",
           overflowY: "auto",
           WebkitOverflowScrolling: "touch"
         }}>
           <div style={{
-            background: "rgba(10, 17, 40, 0.95)",
+            background: "rgba(10, 17, 40, 0.98)",
             border: "1px solid var(--border)",
             borderRadius: 16,
             width: "100%",
             maxWidth: 460,
-            padding: 24,
+            padding: 20,
             position: "relative",
             boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
-            margin: "0 auto 40px"
+            margin: "0 auto 16px",
+            maxHeight: "calc(100vh - 32px)",
+            overflowY: "auto"
           }}>
             {/* Top-Right Close Button for Mobile Accessibility */}
             <button 
@@ -1473,6 +1505,15 @@ export default function CoinsPage() {
               <button type="submit" className="btn-yellow" style={{ width: "100%", padding: 12, fontWeight: 700, fontSize: 13, marginTop: 12 }}>
                 Submit Dispatch Request
               </button>
+              
+              <button 
+                type="button" 
+                onClick={() => setModalType("none")} 
+                className="btn-outline" 
+                style={{ width: "100%", padding: 10, fontWeight: 700, fontSize: 12, marginTop: 8, cursor: "pointer" }}
+              >
+                Cancel &amp; Go Back
+              </button>
             </form>
           </div>
         </div>
@@ -1489,19 +1530,21 @@ export default function CoinsPage() {
           alignItems: "flex-start",
           justifyContent: "center",
           zIndex: 1100,
-          padding: "40px 20px",
+          padding: "16px 12px",
           overflowY: "auto",
           WebkitOverflowScrolling: "touch"
         }}>
           <div style={{
-            background: "rgba(10, 17, 40, 0.95)",
+            background: "rgba(10, 17, 40, 0.98)",
             border: "1px solid var(--border)",
             borderRadius: 16,
             width: "100%",
             maxWidth: 420,
-            padding: 24,
+            padding: 20,
             position: "relative",
-            margin: "0 auto 40px"
+            margin: "0 auto 16px",
+            maxHeight: "calc(100vh - 32px)",
+            overflowY: "auto"
           }}>
             {/* Top-Right Close Button for Mobile Accessibility */}
             <button 
