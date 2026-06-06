@@ -60,6 +60,14 @@ server {
         proxy_cache_bypass $http_upgrade;
     }
 
+    # GoldChain L1 Native Blockchain RPC Routing
+    location /rpc/ {
+        proxy_pass https://127.0.0.1:8545/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_ssl_verify off;
+    }
+
     # Next.js Frontend Routing (serving static files directly)
     location / {
         root /var/www/cloud-exchange/frontend/dist;

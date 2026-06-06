@@ -1,5 +1,6 @@
 import express from "express";
-import { createServer } from "http";
+import http, { createServer } from "http";
+import https from "https";
 import { WebSocketServer, WebSocket } from "ws";
 import cors from "cors";
 import { Pool } from "pg";
@@ -14,10 +15,13 @@ try {
   if (fs.existsSync(envPath)) {
     const envConfig = fs.readFileSync(envPath, "utf-8");
     envConfig.split("\n").forEach((line) => {
-      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+      line = line.trim();
+      if (!line || line.startsWith("#")) return;
+      const match = line.match(/^([\w.-]+)\s*=\s*(.*)?$/);
       if (match) {
         const key = match[1];
         let value = match[2] || "";
+        value = value.trim();
         if (value.startsWith('"') && value.endsWith('"')) {
           value = value.slice(1, -1);
         } else if (value.startsWith("'") && value.endsWith("'")) {
@@ -45,7 +49,22 @@ const app = express();
 const PORT = process.env.PORT || 3002;
 
 app.use(cors());
-app.use(express.json());
+// Set JSON body limit to 10MB to support document image uploads
+app.use(express.json({ limit: "10mb" }));
+
+// Ensure uploads folder exists on startup
+const uploadsDir = path.join(__dirname, "../uploads");
+if (!fs.existsSync(uploadsDir)) {
+  try {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log("[STARTUP] Created backend/uploads folder successfully.");
+  } catch (err) {
+    console.error("[STARTUP] Error creating uploads folder:", err);
+  }
+}
+
+// Serve uploaded document images statically
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // ----------------------------------------------------
 // 1. PostgreSQL Database Setup
@@ -65,7 +84,7 @@ if (dbUrl) {
     console.error("[DATABASE] Error creating connection pool: ", err);
   }
 } else {
-  console.warn("[DATABASE] DATABASE_URL missing. Using temporary in-memory storage.");
+  console.warn("[DATABASE] DATABASE_URL missing. Using temporary in-memory sandbox storage.");
 }
 
 // Auto-run schema migrations on startup if connected to Postgres
@@ -152,21 +171,75 @@ const initializeDatabase = async () => {
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           UNIQUE(user_id, symbol, network)
       );
+
+      CREATE TABLE IF NOT EXISTS p2p_ads (
+          id VARCHAR(50) PRIMARY KEY,
+          seller VARCHAR(255) NOT NULL,
+          side VARCHAR(10) DEFAULT 'SELL',
+          rate NUMERIC(24, 8) NOT NULL,
+          available NUMERIC(24, 8) NOT NULL,
+          min_limit NUMERIC(24, 8) NOT NULL,
+          max_limit NUMERIC(24, 8) NOT NULL,
+          payments TEXT[],
+          is_offline BOOLEAN DEFAULT FALSE,
+          orders INT DEFAULT 0,
+          completion NUMERIC(5, 2) DEFAULT 100.0,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
     `);
+
+    // Add is_blocked column to users table if not exists
+    await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE;");
+
+    // Add block_reason column to users table if not exists
+    await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS block_reason VARCHAR(255);");
+
+    // Add KYC document detail columns if not exists
+    await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_doc_type VARCHAR(100);");
+    await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_doc_number VARCHAR(100);");
+    await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_country VARCHAR(100);");
+    await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_document_url VARCHAR(512);");
+
+    // Ensure admin user exists in DB on startup
+    const adminEmail = "admin@cloudexchange.in";
+    const adminPasswordHash = "466f91320593e9f732adf934e453b81b656950d86baa547b76af6dc51a7bb0e9";
+    const adminRes = await client.query(
+      "INSERT INTO users (email, password_hash, kyc_status, is_merchant) VALUES ($1, $2, 'Tier-2 Verified', TRUE) ON CONFLICT (email) DO NOTHING RETURNING id",
+      [adminEmail, adminPasswordHash]
+    );
+    
+    let adminId: string;
+    if (adminRes.rows.length > 0) {
+      adminId = adminRes.rows[0].id;
+    } else {
+      const uRes = await client.query("SELECT id FROM users WHERE email = $1", [adminEmail]);
+      adminId = uRes.rows[0].id;
+    }
+
+    // Initialize admin balances for BTC, ETH, USDT, SOL, BNB
+    const assets = ["USDT", "BTC", "ETH", "SOL", "BNB"];
+    for (const asset of assets) {
+      await client.query(
+        "INSERT INTO balances (user_id, symbol, amount) VALUES ($1, $2, 0.00) ON CONFLICT (user_id, symbol) DO NOTHING",
+        [adminId, asset]
+      );
+    }
+    console.log("[DATABASE] Default admin account o balances initialize heichi.");
+
     console.log("[DATABASE] Table schemas verified/migrated.");
     client.release();
   } catch (err) {
     isDbConnected = false;
     console.error("[DATABASE] Error connecting to PostgreSQL / running migrations: ", err);
+    console.warn("[DATABASE] Sandbox mode fallback enabled. Using in-memory store.");
   }
 };
 
-initializeDatabase();
-
-// In-Memory Storage Fallbacks
 const memoryUsers: any[] = [];
 const memoryBalances: Record<string, any[]> = {};
 const memoryOrders: any[] = [];
+
+initializeDatabase();
 
 interface P2PEscrow {
   id: string;
@@ -239,19 +312,12 @@ app.post("/api/auth/register", async (req, res) => {
       );
       const userId = result.rows[0].id;
 
-      // Seed initial balances (USDT, BTC, ETH, SOL, BNB)
-      const defaultAssets = [
-        { sym: "USDT", qty: 15740.50 },
-        { sym: "BTC", qty: 0.2450 },
-        { sym: "ETH", qty: 2.8500 },
-        { sym: "SOL", qty: 15.40 },
-        { sym: "BNB", qty: 4.80 }
-      ];
-
-      for (const asset of defaultAssets) {
+      // Initialize real zero balances for all supported assets
+      const defaultAssets = ["USDT", "BTC", "ETH", "SOL", "BNB", "GOLD"];
+      for (const sym of defaultAssets) {
         await pool.query(
-          "INSERT INTO balances (user_id, symbol, amount) VALUES ($1, $2, $3)",
-          [userId, asset.sym, asset.qty]
+          "INSERT INTO balances (user_id, symbol, amount) VALUES ($1, $2, 0) ON CONFLICT DO NOTHING",
+          [userId, sym]
         );
       }
 
@@ -261,24 +327,7 @@ app.post("/api/auth/register", async (req, res) => {
       return res.status(500).json({ error: "Database registration failure." });
     }
   } else {
-    // In-Memory fallback
-    const exists = memoryUsers.some(u => u.email === email);
-    if (exists) {
-      return res.status(400).json({ error: "User already registered in sandbox." });
-    }
-    const userId = "usr-" + Math.floor(1000 + Math.random() * 9000);
-    memoryUsers.push({ id: userId, email, passwordHash });
-    
-    // Seed in-memory balances
-    memoryBalances[userId] = [
-      { symbol: "USDT", amount: 15740.50, inOrder: 0.00 },
-      { symbol: "BTC", amount: 0.2450, inOrder: 0.00 },
-      { symbol: "ETH", amount: 2.8500, inOrder: 0.00 },
-      { symbol: "SOL", amount: 15.40, inOrder: 0.00 },
-      { symbol: "BNB", amount: 4.80, inOrder: 0.00 }
-    ];
-
-    return res.json({ success: true, message: "User registered in sandbox store.", userId });
+    return res.status(503).json({ error: "Database offline. Registration unavailable." });
   }
 });
 
@@ -294,7 +343,7 @@ app.post("/api/auth/login", async (req, res) => {
   if (pool && isDbConnected) {
     try {
       const userRes = await pool.query(
-        "SELECT id, password_hash, kyc_status FROM users WHERE email = $1",
+        "SELECT id, password_hash, kyc_status, is_merchant, merchant_upi_id, is_blocked, block_reason FROM users WHERE email = $1",
         [email]
       );
 
@@ -303,6 +352,9 @@ app.post("/api/auth/login", async (req, res) => {
       }
 
       const user = userRes.rows[0];
+      if (user.is_blocked) {
+        return res.status(403).json({ error: `Your account has been suspended: ${user.block_reason || "Compliance audit pending."}` });
+      }
 
       // Fetch user balances to sync with localstorage
       const balanceRes = await pool.query(
@@ -316,27 +368,324 @@ app.post("/api/auth/login", async (req, res) => {
         userId: user.id,
         email,
         kycStatus: user.kyc_status,
-        balances: balanceRes.rows
+        balances: balanceRes.rows,
+        isMerchant: user.is_merchant,
+        merchantUpi: user.merchant_upi_id
       });
     } catch (err) {
       console.error("[LOGIN ERROR] ", err);
       return res.status(500).json({ error: "Database login failure." });
     }
   } else {
-    // In-memory fallback
-    const user = memoryUsers.find(u => u.email === email && u.passwordHash === passwordHash);
-    if (!user) {
-      return res.status(401).json({ error: "Invalid email or security password." });
-    }
+    return res.status(503).json({ error: "Database offline. Login unavailable." });
+  }
+});
 
+// Authentication: Passwordless Login
+app.post("/api/auth/passwordless-login", async (req, res) => {
+  const { phoneOrEmail } = req.body;
+  if (!phoneOrEmail) {
+    return res.status(400).json({ error: "Missing mobile or email identifier." });
+  }
+
+  if (pool && isDbConnected) {
+    try {
+      const userRes = await pool.query(
+        "SELECT id, kyc_status, is_merchant, merchant_upi_id, is_blocked, block_reason FROM users WHERE email = $1",
+        [phoneOrEmail]
+      );
+
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ error: "User account not found. Please register first." });
+      }
+
+      const user = userRes.rows[0];
+      if (user.is_blocked) {
+        return res.status(403).json({ error: `Your account has been suspended: ${user.block_reason || "Compliance audit pending."}` });
+      }
+
+      const balanceRes = await pool.query(
+        "SELECT symbol, amount, in_order FROM balances WHERE user_id = $1",
+        [user.id]
+      );
+
+      return res.json({
+        success: true,
+        token: `jwt-${user.id}-${Date.now()}`,
+        userId: user.id,
+        email: phoneOrEmail,
+        kycStatus: user.kyc_status,
+        balances: balanceRes.rows,
+        isMerchant: user.is_merchant,
+        merchantUpi: user.merchant_upi_id
+      });
+    } catch (err: any) {
+      console.error("[PASSWORDLESS LOGIN ERROR] ", err);
+      return res.status(500).json({ error: "Database authentication failed: " + err.message });
+    }
+  } else {
+    // Sandbox mode fallback
     return res.json({
       success: true,
-      token: `jwt-${user.id}-${Date.now()}`,
-      userId: user.id,
-      email,
+      token: `jwt-sandbox-${Date.now()}`,
+      userId: "usr-sandbox-101",
+      email: phoneOrEmail,
       kycStatus: "Tier-1 Basic (Email Verified)",
-      balances: memoryBalances[user.id] || []
+      balances: [],
+      isMerchant: false
     });
+  }
+});
+
+// Authentication Status Check
+app.get("/api/auth/status/:userId", async (req, res) => {
+  const { userId } = req.params;
+  if (pool && isDbConnected) {
+    try {
+      const userRes = await pool.query(
+        "SELECT id, email, kyc_status as \"kycStatus\", is_merchant as \"isMerchant\", is_blocked as \"isBlocked\" FROM users WHERE id::text = $1 OR email = $1",
+        [userId]
+      );
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ error: "User not found." });
+      }
+      return res.json({ success: true, user: userRes.rows[0] });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Failed to query status: " + err.message });
+    }
+  } else {
+    return res.json({ success: true, user: { kycStatus: "Tier-1 Basic (Email Verified)" } });
+  }
+});
+
+// Admin: List all Users
+app.get("/api/admin/users", async (req, res) => {
+  if (pool && isDbConnected) {
+    try {
+      const result = await pool.query(
+        "SELECT id, email, kyc_status as \"kycStatus\", kyc_document_url as \"kycDocumentUrl\", kyc_doc_type as \"kycDocType\", kyc_doc_number as \"kycDocNumber\", kyc_country as \"kycCountry\", is_merchant as \"isMerchant\", is_blocked as \"isBlocked\", block_reason as \"blockReason\", created_at as \"createdAt\" FROM users ORDER BY created_at DESC"
+      );
+      return res.json({ success: true, users: result.rows });
+    } catch (err: any) {
+      console.error("[ADMIN LIST USERS ERROR] ", err);
+      return res.status(500).json({ error: "Failed to fetch users: " + err.message });
+    }
+  } else {
+    // Sandbox mock users
+    return res.json({
+      success: true,
+      users: [
+        { id: "usr-101", email: "bunty_trader@exchange.com", kycStatus: "Tier-1 Basic (Email Verified)", kycDocumentUrl: null, kycDocType: null, kycDocNumber: null, kycCountry: null, isMerchant: false, isBlocked: false, blockReason: null, createdAt: new Date().toISOString() },
+        { id: "usr-102", email: "rakesh_bhol@cloudexchange.com", kycStatus: "Tier-2 Verified (Identity Approved)", kycDocumentUrl: "/uploads/dummy_aadhaar.png", kycDocType: "Aadhaar / National ID Card", kycDocNumber: "1234-5678-9012", kycCountry: "India", isMerchant: true, isBlocked: false, blockReason: null, createdAt: new Date().toISOString() },
+        { id: "usr-103", email: "blocked_scammer@spambox.com", kycStatus: "Tier-1 Basic (Email Verified)", kycDocumentUrl: null, kycDocType: null, kycDocNumber: null, kycCountry: null, isMerchant: false, isBlocked: true, blockReason: "Fraudulent dispute transaction", createdAt: new Date().toISOString() }
+      ]
+    });
+  }
+});
+
+// Admin: Toggle Block status of a User
+app.post("/api/admin/users/toggle-block", async (req, res) => {
+  const { userId, reason } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: "Missing userId parameter." });
+  }
+
+  if (pool && isDbConnected) {
+    try {
+      // First select is_blocked to know if we are blocking or unblocking
+      const userRes = await pool.query(
+        "SELECT is_blocked FROM users WHERE id::text = $1 OR email = $1",
+        [userId]
+      );
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ error: "User not found." });
+      }
+      
+      const willBlock = !userRes.rows[0].is_blocked;
+      const blockReason = willBlock ? (reason || "Compliance audit pending.") : null;
+
+      await pool.query(
+        "UPDATE users SET is_blocked = $1, block_reason = $2 WHERE id::text = $3 OR email = $3",
+        [willBlock, blockReason, userId]
+      );
+      return res.json({ success: true, isBlocked: willBlock, blockReason });
+    } catch (err: any) {
+      console.error("[ADMIN TOGGLE BLOCK ERROR] ", err);
+      return res.status(500).json({ error: "Failed to toggle block status: " + err.message });
+    }
+  } else {
+    return res.json({ success: true, message: "Sandbox block status toggled." });
+  }
+});
+
+// Admin: Adjust Wallet Balance of a User (Credit/Debit)
+app.post("/api/admin/balances/adjust", async (req, res) => {
+  const { userId, symbol, amount, action, reason } = req.body;
+  if (!userId || !symbol || amount === undefined || !action) {
+    return res.status(400).json({ error: "Missing required balance adjustment parameters." });
+  }
+
+  const adjAmount = parseFloat(amount);
+  if (isNaN(adjAmount) || adjAmount <= 0) {
+    return res.status(400).json({ error: "Adjustment amount must be a positive number." });
+  }
+
+  if (pool && isDbConnected) {
+    try {
+      // Check if user exists
+      const userRes = await pool.query("SELECT id, email FROM users WHERE id::text = $1 OR email = $1", [userId]);
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ error: "User account not found." });
+      }
+      const actualUserId = userRes.rows[0].id;
+
+      // Get current balance
+      const balRes = await pool.query("SELECT amount FROM balances WHERE user_id = $1 AND symbol = $2", [actualUserId, symbol]);
+      let currentAmount = balRes.rows.length > 0 ? parseFloat(balRes.rows[0].amount) : 0;
+
+      let newAmount = currentAmount;
+      if (action === "add") {
+        newAmount = +(currentAmount + adjAmount).toFixed(18);
+      } else if (action === "subtract") {
+        newAmount = +(currentAmount - adjAmount).toFixed(18);
+        if (newAmount < 0) {
+          return res.status(400).json({ error: `Insufficient balance. Cannot deduct ${adjAmount} ${symbol} from current balance of ${currentAmount} ${symbol}.` });
+        }
+      } else {
+        return res.status(400).json({ error: "Invalid action. Must be 'add' or 'subtract'." });
+      }
+
+      // Update balance
+      await pool.query(
+        "INSERT INTO balances (user_id, symbol, amount) VALUES ($1, $2, $3) ON CONFLICT (user_id, symbol) DO UPDATE SET amount = $3",
+        [actualUserId, symbol, newAmount]
+      );
+
+      // Create transaction record for audit
+      const txid = "adj-" + crypto.randomBytes(16).toString("hex");
+      const txType = action === "add" ? "DEPOSIT" : "WITHDRAWAL";
+      const txDesc = reason || `Admin Balance Adjustment (${action.toUpperCase()})`;
+      await pool.query(
+        "INSERT INTO wallet_transactions (user_id, symbol, type, amount, address, network, txid, status) VALUES ($1, $2, $3, $4, $5, 'ADMIN ADJUSTMENT', $6, 'COMPLETED')",
+        [actualUserId, symbol, txType, adjAmount, txDesc, txid]
+      );
+
+      return res.json({ success: true, message: `Successfully adjusted balance to ${newAmount} ${symbol}`, newAmount });
+    } catch (err: any) {
+      console.error("[ADMIN BALANCE ADJUST ERROR] ", err);
+      return res.status(500).json({ error: "Failed to adjust balance: " + err.message });
+    }
+  } else {
+    return res.json({ success: true, message: "Sandbox balance adjustment simulated.", newAmount: adjAmount });
+  }
+});
+
+// Admin: Update KYC Status directly
+app.post("/api/admin/users/update-kyc", async (req, res) => {
+  const { userId, kycStatus } = req.body;
+  if (!userId || !kycStatus) {
+    return res.status(400).json({ error: "Missing required update parameters." });
+  }
+
+  if (pool && isDbConnected) {
+    try {
+      // If rejecting kyc, clean up file scan columns too
+      if (kycStatus.includes("Tier-1") || kycStatus.includes("Rejected")) {
+        await pool.query(
+          "UPDATE users SET kyc_status = $1, kyc_document_url = NULL, kyc_doc_type = NULL, kyc_doc_number = NULL, kyc_country = NULL WHERE id::text = $2 OR email = $2",
+          [kycStatus, userId]
+        );
+      } else {
+        await pool.query(
+          "UPDATE users SET kyc_status = $1 WHERE id::text = $2 OR email = $2",
+          [kycStatus, userId]
+        );
+      }
+      return res.json({ success: true, kycStatus });
+    } catch (err: any) {
+      console.error("[ADMIN UPDATE KYC ERROR] ", err);
+      return res.status(500).json({ error: "Failed to update KYC status: " + err.message });
+    }
+  } else {
+    return res.json({ success: true, kycStatus });
+  }
+});
+
+// User: Submit Document KYC details
+app.post("/api/kyc/submit", async (req, res) => {
+  const { userId, country, idType, idNumber, documentImage } = req.body;
+  if (!userId || !country || !idType || !idNumber || !documentImage) {
+    return res.status(400).json({ error: "Missing required KYC fields." });
+  }
+
+  if (pool && isDbConnected) {
+    try {
+      // 1. Process base64 document image
+      let imageUrl = "";
+      if (documentImage.startsWith("data:image")) {
+        const matches = documentImage.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (!matches || matches.length !== 3) {
+          return res.status(400).json({ error: "Invalid document image format." });
+        }
+        const ext = matches[1].split("/")[1] || "png";
+        const buffer = Buffer.from(matches[2], "base64");
+        const filename = `kyc_${userId.replace(/[^a-zA-Z0-9-]/g, "")}_${Date.now()}.${ext}`;
+        const savePath = path.join(__dirname, "../uploads", filename);
+        fs.writeFileSync(savePath, buffer);
+        imageUrl = `/uploads/${filename}`;
+      } else {
+        imageUrl = documentImage; // fallback
+      }
+
+      // 2. Update user row in DB
+      await pool.query(
+        "UPDATE users SET kyc_status = 'Pending Verification', kyc_document_url = $1, kyc_doc_type = $2, kyc_doc_number = $3, kyc_country = $4 WHERE id::text = $5 OR email = $5",
+        [imageUrl, idType, idNumber, country, userId]
+      );
+
+      console.log(`[KYC SUBMIT] User ${userId} submitted document type ${idType}. Image saved to ${imageUrl}`);
+      return res.json({ success: true, message: "KYC document submitted for compliance review.", kycStatus: "Pending Verification" });
+    } catch (err: any) {
+      console.error("[KYC SUBMIT ERROR] ", err);
+      return res.status(500).json({ error: "Failed to submit KYC: " + err.message });
+    }
+  } else {
+    // Sandbox simulated fallback
+    return res.json({ success: true, message: "Simulated sandbox KYC submit successful.", kycStatus: "Pending Verification" });
+  }
+});
+
+// Admin: Toggle Merchant status directly
+app.post("/api/admin/users/toggle-merchant", async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: "Missing userId parameter." });
+  }
+
+  if (pool && isDbConnected) {
+    try {
+      const userRes = await pool.query(
+        "SELECT is_merchant FROM users WHERE id::text = $1 OR email = $1",
+        [userId]
+      );
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ error: "User not found." });
+      }
+      
+      const newStatus = !userRes.rows[0].is_merchant;
+      const upiId = newStatus ? "admin_approved@okaxis" : null;
+
+      await pool.query(
+        "UPDATE users SET is_merchant = $1, merchant_upi_id = COALESCE(merchant_upi_id, $2) WHERE id::text = $3 OR email = $3",
+        [newStatus, upiId, userId]
+      );
+      return res.json({ success: true, isMerchant: newStatus });
+    } catch (err: any) {
+      console.error("[ADMIN TOGGLE MERCHANT ERROR] ", err);
+      return res.status(500).json({ error: "Failed to toggle merchant status: " + err.message });
+    }
+  } else {
+    return res.json({ success: true, message: "Sandbox merchant toggle simulated." });
   }
 });
 
@@ -355,7 +704,7 @@ app.get("/api/balances/:userId", async (req, res) => {
       return res.status(500).json({ error: "Could not fetch balances." });
     }
   } else {
-    return res.json({ success: true, balances: memoryBalances[userId] || [] });
+    return res.status(503).json({ error: "Database offline. Balances unavailable." });
   }
 });
 
@@ -426,33 +775,7 @@ app.post("/api/wallet/deposit", async (req, res) => {
       return res.status(500).json({ error: `Database deposit operation failed: ${err.message}` });
     }
   } else {
-    // In-memory sandbox fallback
-    const newTx: WalletTransaction = {
-      id: "tx-" + Math.floor(100000 + Math.random() * 900000),
-      userId,
-      symbol,
-      type: "DEPOSIT",
-      amount: txAmount,
-      address,
-      network,
-      txid,
-      status: "COMPLETED",
-      createdAt: new Date().toISOString()
-    };
-    memoryWalletTransactions.unshift(newTx);
-
-    // Update in-memory balances
-    if (!memoryBalances[userId]) {
-      memoryBalances[userId] = [];
-    }
-    const balanceObj = memoryBalances[userId].find(b => b.symbol === symbol);
-    if (balanceObj) {
-      balanceObj.amount = +(balanceObj.amount + txAmount).toFixed(8);
-    } else {
-      memoryBalances[userId].push({ symbol, amount: txAmount, inOrder: 0.0 });
-    }
-
-    return res.json({ success: true, message: `Successfully deposited ${txAmount} ${symbol} to sandbox`, txid });
+    return res.status(503).json({ error: "Database offline. Deposits unavailable." });
   }
 });
 
@@ -527,16 +850,49 @@ app.post("/api/wallet/withdraw", async (req, res) => {
         return res.status(400).json({ error: `Insufficient ${symbol} balance. Your current balance is ${currentBalance} ${symbol}.` });
       }
 
-      // Deduct balance
+      // Binance equivalent withdrawal fees map
+      const feeMap: Record<string, number> = {
+        "USDT": 1.0,
+        "BTC": 0.0002,
+        "ETH": 0.003,
+        "SOL": 0.01,
+        "BNB": 0.001
+      };
+      const withdrawFee = feeMap[symbol] || 0;
+
+      if (txAmount <= withdrawFee) {
+        return res.status(400).json({ error: `Withdrawal amount must be greater than the network fee of ${withdrawFee} ${symbol}.` });
+      }
+
+      const netAmount = +(txAmount - withdrawFee).toFixed(8);
+
+      // Deduct full amount from user balance
       await pool.query("UPDATE balances SET amount = amount - $1 WHERE user_id = $2 AND symbol = $3", [txAmount, userId, symbol]);
 
-      // Create transaction record
+      // Credit fee to admin account
+      const adminRes = await pool.query("SELECT id FROM users WHERE email = 'admin@cloudexchange.in'");
+      if (adminRes.rows.length > 0) {
+        const adminId = adminRes.rows[0].id;
+        await pool.query(
+          "INSERT INTO balances (user_id, symbol, amount) VALUES ($1, $2, $3) ON CONFLICT (user_id, symbol) DO UPDATE SET amount = balances.amount + $3",
+          [adminId, symbol, withdrawFee]
+        );
+        console.log(`[WITHDRAW FEE] Credited fee of ${withdrawFee} ${symbol} to admin.`);
+      }
+
+      // Create transaction record with net amount
       await pool.query(
         "INSERT INTO wallet_transactions (user_id, symbol, type, amount, address, network, txid, status) VALUES ($1, $2, 'WITHDRAWAL', $3, $4, $5, $6, 'COMPLETED')",
-        [userId, symbol, txAmount, address, network, txid]
+        [userId, symbol, netAmount, address, network, txid]
       );
 
-      return res.json({ success: true, message: `Successfully withdrew ${txAmount} ${symbol}`, txid });
+      return res.json({ 
+        success: true, 
+        message: `Successfully withdrew ${netAmount} ${symbol} (after deducting network fee of ${withdrawFee} ${symbol})`, 
+        txid,
+        netAmount,
+        fee: withdrawFee
+      });
     } catch (err: any) {
       console.error("[WALLET WITHDRAW DB ERROR]", err);
       return res.status(500).json({ error: `Database withdrawal operation failed: ${err.message}` });
@@ -589,8 +945,7 @@ app.get("/api/wallet/transactions/:userId", async (req, res) => {
       return res.status(500).json({ error: "Could not fetch wallet transaction logs." });
     }
   } else {
-    const userTxs = memoryWalletTransactions.filter(tx => tx.userId === userId);
-    return res.json({ success: true, transactions: userTxs });
+    return res.status(503).json({ error: "Database offline. Transactions unavailable." });
   }
 });
 
@@ -850,6 +1205,155 @@ app.post("/api/wallet/sync-real-deposits", async (req, res) => {
   }
 });
 
+// P2P Merchant Application
+app.post("/api/p2p/merchant/apply", async (req, res) => {
+  const { userId, upiId } = req.body;
+  if (!userId || !upiId) {
+    return res.status(400).json({ error: "Missing required fields: userId, upiId." });
+  }
+
+  if (pool && isDbConnected) {
+    try {
+      // 1. Check if user exists
+      const userRes = await pool.query("SELECT id, email, is_merchant FROM users WHERE id::text = $1 OR email = $1", [userId]);
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ error: "User account not found." });
+      }
+
+      const user = userRes.rows[0];
+      const uId = user.id;
+
+      if (user.is_merchant) {
+        return res.json({ success: true, message: "User is already an approved P2P Merchant.", isMerchant: true });
+      }
+
+      // 2. Check user balance in USDT
+      const balRes = await pool.query("SELECT amount FROM balances WHERE user_id = $1 AND symbol = 'USDT'", [uId]);
+      const currentUSDT = balRes.rows.length > 0 ? parseFloat(balRes.rows[0].amount) : 0;
+
+      if (currentUSDT < 500) {
+        return res.status(400).json({ error: `Insufficient USDT balance. A collateral of 500 USDT is required, but you only have ${currentUSDT} USDT.` });
+      }
+
+      // 3. Deduct collateral and register lock transaction
+      await pool.query("UPDATE balances SET amount = amount - 500 WHERE user_id = $1 AND symbol = 'USDT'", [uId]);
+      
+      const txid = "lock-" + crypto.randomBytes(16).toString("hex");
+      await pool.query(
+        "INSERT INTO wallet_transactions (user_id, symbol, type, amount, address, network, txid, status) VALUES ($1, 'USDT', 'WITHDRAWAL', 500, 'Collateral Lock', 'P2P Escrow', $2, 'COMPLETED')",
+        [uId, txid]
+      );
+
+      // 4. Set merchant status in users table
+      await pool.query(
+        "UPDATE users SET is_merchant = true, merchant_upi_id = $1 WHERE id = $2",
+        [upiId, uId]
+      );
+
+      console.log(`[P2P MERCHANT] Promoted user ${user.email} to merchant. Locked 500 USDT collateral.`);
+      return res.json({ success: true, message: "Merchant status approved! 500 USDT locked as collateral.", isMerchant: true, merchantUpi: upiId });
+    } catch (err: any) {
+      console.error("[P2P MERCHANT APPLY DB ERROR]", err);
+      return res.status(500).json({ error: `Database merchant application failed: ${err.message}` });
+    }
+  } else {
+    return res.status(503).json({ error: "Database offline. Merchant application unavailable." });
+  }
+});
+
+// P2P Marketplace
+app.get("/api/p2p/ads", async (req, res) => {
+  if (pool && isDbConnected) {
+    try {
+      const result = await pool.query(
+        'SELECT id, seller, side, rate::float, available::float, min_limit as "minLimit", max_limit as "maxLimit", payments, is_offline as "isOffline", orders, completion::float FROM p2p_ads ORDER BY created_at DESC'
+      );
+      return res.json({ success: true, ads: result.rows });
+    } catch (err: any) {
+      console.error("[P2P GET ADS DB ERROR]", err);
+      return res.status(500).json({ error: "Failed to query P2P ads from database." });
+    }
+  } else {
+    return res.status(503).json({ error: "Database offline. P2P ads unavailable." });
+  }
+});
+
+app.post("/api/p2p/post-ad", async (req, res) => {
+  const { seller, side, rate, available, minLimit, maxLimit, payments } = req.body;
+  const newAd = {
+    id: "ad-" + Math.floor(10000 + Math.random() * 90000),
+    seller: seller || "MerchantUser",
+    side: side || "SELL",
+    orders: 0,
+    completion: 100.0,
+    rate: parseFloat(rate),
+    available: parseFloat(available),
+    minLimit: parseFloat(minLimit),
+    maxLimit: parseFloat(maxLimit),
+    payments: Array.isArray(payments) ? payments : [payments || "UPI"],
+    isOffline: false
+  };
+
+  if (pool && isDbConnected) {
+    try {
+      await pool.query(
+        "INSERT INTO p2p_ads (id, seller, side, rate, available, min_limit, max_limit, payments, is_offline, orders, completion) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+        [newAd.id, newAd.seller, newAd.side, newAd.rate, newAd.available, newAd.minLimit, newAd.maxLimit, newAd.payments, newAd.isOffline, newAd.orders, newAd.completion]
+      );
+      return res.json({ success: true, ad: newAd });
+    } catch (err: any) {
+      console.error("[P2P POST AD DB ERROR]", err);
+      return res.status(500).json({ error: "Failed to persist P2P ad to database." });
+    }
+  } else {
+    return res.status(503).json({ error: "Database offline. P2P posting unavailable." });
+  }
+});
+
+app.post("/api/p2p/ads/toggle", async (req, res) => {
+  const { adId } = req.body;
+  if (!adId) {
+    return res.status(400).json({ error: "Missing adId parameter." });
+  }
+
+  if (pool && isDbConnected) {
+    try {
+      await pool.query(
+        "UPDATE p2p_ads SET is_offline = NOT is_offline WHERE id = $1",
+        [adId]
+      );
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("[P2P TOGGLE AD DB ERROR]", err);
+      return res.status(500).json({ error: "Failed to toggle P2P ad status." });
+    }
+  } else {
+    return res.status(503).json({ error: "Database offline. P2P toggle unavailable." });
+  }
+});
+
+app.post("/api/p2p/ads/delete", async (req, res) => {
+  const { adId } = req.body;
+  if (!adId) {
+    return res.status(400).json({ error: "Missing adId parameter." });
+  }
+
+  if (pool && isDbConnected) {
+    try {
+      await pool.query(
+        "DELETE FROM p2p_ads WHERE id = $1",
+        [adId]
+      );
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("[P2P DELETE AD DB ERROR]", err);
+      return res.status(500).json({ error: "Failed to delete P2P ad." });
+    }
+  } else {
+    return res.status(503).json({ error: "Database offline. P2P deletion unavailable." });
+  }
+});
+
 // Orderbook Management
 app.post("/api/orders/create", async (req, res) => {
   const { userId, pair, side, price, quantity, type } = req.body;
@@ -871,43 +1375,35 @@ app.post("/api/orders/create", async (req, res) => {
         "INSERT INTO orders (user_id, pair, side, type, price, quantity, status) VALUES ($1, $2, $3, $4, $5, $6, $7)",
         [userId, pair, side, type, price, quantity, "PENDING"]
       );
+      
+      memoryOrders.push(newOrder);
+
+      // Trigger order matching engine cycle
+      matchOrders(pair);
+
+      return res.json({ success: true, order: newOrder });
     } catch (err) {
-      console.warn("Database order log error, keeping in engine memory: ", err);
+      console.error("Database order log error: ", err);
+      return res.status(500).json({ error: "Database failed to persist order." });
     }
+  } else {
+    return res.status(503).json({ error: "Database offline. Order execution unavailable." });
   }
-
-  memoryOrders.push(newOrder);
-
-  // Trigger order matching engine cycle
-  matchOrders(pair);
-
-  res.json({ success: true, order: newOrder });
 });
 
-app.get("/api/orders/list", (req, res) => {
-  res.json({ success: true, orders: memoryOrders });
-});
-
-// P2P Marketplace
-app.get("/api/p2p/ads", (req, res) => {
-  res.json({ success: true, ads: p2pAds });
-});
-
-app.post("/api/p2p/post-ad", (req, res) => {
-  const { seller, rate, available, minLimit, maxLimit, payments } = req.body;
-  const newAd = {
-    id: "ad-" + Math.floor(10000 + Math.random() * 90000),
-    seller: seller || "MerchantUser",
-    orders: 0,
-    completion: 100.0,
-    rate: parseFloat(rate),
-    available: parseFloat(available),
-    minLimit: parseFloat(minLimit),
-    maxLimit: parseFloat(maxLimit),
-    payments: payments || ["UPI"]
-  };
-  p2pAds.unshift(newAd);
-  res.json({ success: true, ad: newAd });
+app.get("/api/orders/list", async (req, res) => {
+  if (pool && isDbConnected) {
+    try {
+      const result = await pool.query(
+        "SELECT id, pair, side, type, price::float, quantity::float, filled::float, status, created_at as timestamp FROM orders WHERE status = 'PENDING' ORDER BY created_at DESC"
+      );
+      return res.json({ success: true, orders: result.rows });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to list orders from database." });
+    }
+  } else {
+    return res.status(503).json({ error: "Database offline. Orders list unavailable." });
+  }
 });
 
 // ----------------------------------------------------
@@ -1028,6 +1524,8 @@ app.post("/api/security/send-sms-otp", async (req, res) => {
 
 app.post("/api/security/verify-otp", (req, res) => {
   const { email, emailCode, smsCode } = req.body;
+  console.log(`[SECURITY VERIFY OTP] Checking verification for '${email}'. emailCode: '${emailCode}', smsCode: '${smsCode}'`);
+  console.log(`[SECURITY VERIFY OTP] Active cache keys:`, Object.keys(otpCache));
   if (!email) {
     return res.status(400).json({ error: "Email/User identification is required." });
   }
@@ -1058,7 +1556,6 @@ app.post("/api/security/verify-otp", (req, res) => {
 // ----------------------------------------------------
 // P2P Escrow & UPI Webhook Integration
 // ----------------------------------------------------
-import http from "http";
 
 function dispatchL1Settlement(buyer: string, seller: string, amount: number, price: number) {
   const payload = JSON.stringify({
@@ -1076,10 +1573,11 @@ function dispatchL1Settlement(buyer: string, seller: string, amount: number, pri
     headers: {
       "Content-Type": "application/json",
       "Content-Length": Buffer.byteLength(payload)
-    }
+    },
+    rejectUnauthorized: false
   };
 
-  const req = http.request(options, (res) => {
+  const req = https.request(options, (res) => {
     let data = "";
     res.on("data", (chunk) => { data += chunk; });
     res.on("end", () => {
@@ -1196,7 +1694,25 @@ app.post("/api/p2p/escrows/release", async (req, res) => {
           const buyerRes = await pool.query("SELECT id FROM users WHERE email = $1 OR id::text = $1", [escrow.buyerId]);
           if (buyerRes.rows.length > 0) {
             const bId = buyerRes.rows[0].id;
-            await pool.query("INSERT INTO balances (user_id, symbol, amount) VALUES ($1, 'USDT', $2) ON CONFLICT (user_id, symbol) DO UPDATE SET amount = balances.amount + $2", [bId, escrow.amountUsdt]);
+            const feeAmount = +(parseFloat(escrow.amountUsdt as any) * 0.001).toFixed(8);
+            const netAmount = +(parseFloat(escrow.amountUsdt as any) - feeAmount).toFixed(8);
+            
+            // Credit net amount to buyer
+            await pool.query(
+              "INSERT INTO balances (user_id, symbol, amount) VALUES ($1, 'USDT', $2) ON CONFLICT (user_id, symbol) DO UPDATE SET amount = balances.amount + $2", 
+              [bId, netAmount]
+            );
+
+            // Credit P2P escrow fee to admin
+            const adminRes = await pool.query("SELECT id FROM users WHERE email = 'admin@cloudexchange.in'");
+            if (adminRes.rows.length > 0) {
+              const adminId = adminRes.rows[0].id;
+              await pool.query(
+                "INSERT INTO balances (user_id, symbol, amount) VALUES ($1, 'USDT', $2) ON CONFLICT (user_id, symbol) DO UPDATE SET amount = balances.amount + $2", 
+                [adminId, feeAmount]
+              );
+              console.log(`[P2P ESCROW FEE] Deducted ${feeAmount} USDT (0.1%) fee, credited to admin.`);
+            }
           }
         }
       }
@@ -1358,7 +1874,38 @@ wss.on("connection", (ws: WebSocket) => {
   });
 });
 
+// GoldChain L1 Custom RPC Proxy route
+app.post("/api/goldchain-rpc", (req, res) => {
+  const payload = JSON.stringify(req.body);
+
+  const options = {
+    hostname: "127.0.0.1",
+    port: 8545,
+    path: "/",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(payload)
+    },
+    rejectUnauthorized: false
+  };
+
+  const proxyReq = https.request(options, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+    proxyRes.pipe(res, { end: true });
+  });
+
+  proxyReq.on("error", (err) => {
+    console.error("[RPC PROXY ERROR] GoldChain L1 node unreachable: ", err.message);
+    res.status(503).json({ error: "GoldChain L1 node unreachable" });
+  });
+
+  proxyReq.write(payload);
+  proxyReq.end();
+});
+
 server.listen(PORT, () => {
   console.log(`[HTTP SERVER] Running on port ${PORT}`);
   console.log(`[WS FEED SERVER] Streaming active on port ${PORT}`);
 });
+

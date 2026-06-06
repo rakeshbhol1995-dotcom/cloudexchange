@@ -1,8 +1,30 @@
-#[derive(Clone, Debug)]
+use borsh::{BorshSerialize, BorshDeserialize};
+use serde::{Serialize, Deserialize};
+use goldchain_storage::Storage;
+
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct EconomicsConfig {
     pub initial_block_reward: u64,
     pub halving_interval: u64,
     pub burn_percentage: u8,
+    pub unbonding_period: u64,
+}
+
+impl EconomicsConfig {
+    pub fn load_from_db(storage: &Storage) -> Self {
+        if let Ok(Some(bytes)) = storage.get_contract_state_raw("system_economic_config") {
+            if let Ok(config) = borsh::from_slice::<EconomicsConfig>(&bytes) {
+                return config;
+            }
+        }
+        EconomicsConfig::default()
+    }
+
+    pub fn save_to_db(&self, storage: &Storage) -> Result<(), String> {
+        let bytes = borsh::to_vec(self).map_err(|e| e.to_string())?;
+        storage.put_contract_state_raw("system_economic_config", &bytes).map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 impl Default for EconomicsConfig {
@@ -11,6 +33,7 @@ impl Default for EconomicsConfig {
             initial_block_reward: 2_000_000_000, // 2 GOLD with 9 decimals (2,000,000,000)
             halving_interval: 210_000,
             burn_percentage: 50, // 50% fee burn (EIP-1559 style)
+            unbonding_period: 21_600, // 21,600 blocks (3 days) unbonding period
         }
     }
 }
@@ -123,6 +146,7 @@ mod tests {
             initial_block_reward: 1000,
             halving_interval: 100,
             burn_percentage: 50,
+            unbonding_period: 3,
         };
         let economics = EconomicsModule::new(config);
 
@@ -139,6 +163,7 @@ mod tests {
             initial_block_reward: 1000,
             halving_interval: 100,
             burn_percentage: 30,
+            unbonding_period: 3,
         };
         let economics = EconomicsModule::new(config);
 

@@ -27,6 +27,12 @@ impl TransactionValidation for Transaction {
         if self.fee == 0 {
             return Err(CoreError::InvalidTransaction("Transaction fee must be greater than zero".to_string()));
         }
+        if self.fee < self.gas_limit {
+            return Err(CoreError::InvalidTransaction(format!(
+                "Transaction fee ({}) is less than gas limit ({})",
+                self.fee, self.gas_limit
+            )));
+        }
         self.verify_signature().map_err(|e| CoreError::InvalidTransaction(e))
     }
 }
@@ -68,7 +74,7 @@ mod state_access_list_tests {
         let from_addr = Address::from_public_key(&priv_key.public_key());
         let to_addr = Address::from_public_key(&PrivateKey::generate().public_key());
 
-        let tx = Transaction::new(from_addr, to_addr, 1000, 1, 10, TxType::Transfer, Vec::new());
+        let tx = Transaction::new(from_addr, to_addr, 1000, 1, 10, 10, TxType::Transfer, Vec::new());
 
         let decl1 = Address::from_public_key(&PrivateKey::generate().public_key());
         let decl2 = Address::from_public_key(&PrivateKey::generate().public_key());

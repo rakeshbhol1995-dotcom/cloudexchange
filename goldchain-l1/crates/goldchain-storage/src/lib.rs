@@ -36,6 +36,7 @@ mod tests {
             5000,
             5,
             10,
+            10, // gas_limit
             TxType::Transfer,
             Vec::new()
         );

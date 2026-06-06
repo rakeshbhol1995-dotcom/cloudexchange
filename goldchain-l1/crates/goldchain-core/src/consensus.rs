@@ -29,6 +29,7 @@ pub struct ConsensusState {
     // Tracks votes per validator at the current round
     pub prevotes: HashMap<PublicKey, Option<Hash>>,
     pub precommits: HashMap<PublicKey, Option<Hash>>,
+    pub proposals_seen: HashMap<u64, Vec<goldchain_types::Block>>,
 }
 
 impl ConsensusState {
@@ -43,6 +44,7 @@ impl ConsensusState {
             locked_round: None,
             prevotes: HashMap::new(),
             precommits: HashMap::new(),
+            proposals_seen: HashMap::new(),
         }
     }
 
@@ -62,6 +64,38 @@ impl ConsensusState {
         self.locked_round = None;
         self.prevotes.clear();
         self.precommits.clear();
+        self.proposals_seen.retain(|&h, _| h >= self.height);
+    }
+
+    /// Verifies that a block proposer has not signed two different blocks at the same height (equivocation).
+    /// If equivocation is detected, slashes the validator's stake on-chain and in-memory.
+    pub fn verify_and_record_proposal(
+        &mut self,
+        block: &goldchain_types::Block,
+        storage: &goldchain_storage::Storage,
+    ) -> Result<(), CoreError> {
+        let height = block.header.height;
+        let validator_addr = &block.header.validator;
+        let pubkey = validator_addr.to_public_key()
+            .map_err(|e| CoreError::InvalidBlock(format!("Invalid proposer key: {}", e)))?;
+        
+        let seen = self.proposals_seen.entry(height).or_insert_with(Vec::new);
+        let block_hash = block.hash();
+        
+        for old_block in seen.iter() {
+            if old_block.header.validator == *validator_addr && old_block.hash() != block_hash {
+                // Equivocation detected!
+                println!("🚨 EQUIVOCATION DETECTED: Validator {} signed two different blocks at height {}!", validator_addr.as_str(), height);
+                // Call slash_validator_on_chain (5% slash)
+                crate::block::slash_validator_on_chain(storage, validator_addr, 5)?;
+                // Slash validator in-memory
+                let _ = self.slash_validator(&pubkey);
+                return Err(CoreError::InvalidBlock("Equivocation detected: proposer double-signed at this height".to_string()));
+            }
+        }
+        
+        seen.push(block.clone());
+        Ok(())
     }
 
     /// Simulates validator block proposal step
@@ -165,9 +199,13 @@ impl ConsensusState {
 /// Simulates a distributed network of validators running BFT consensus over a P2P mesh network.
 pub fn simulate_p2p_consensus_gossip(
     validator_keys: Vec<(goldchain_crypto::keys::PrivateKey, String)>,
-    block_hash: Hash,
+    _old_block_hash: Hash,
 ) -> Result<(), CoreError> {
     use crate::p2p::{P2PNode, GossipMessage};
+
+    let db_path = "sim_gossip_temp.redb";
+    let _ = std::fs::remove_file(db_path);
+    let storage = goldchain_storage::Storage::open(db_path).unwrap();
 
     struct SimulatedNode {
         pubkey: PublicKey,
@@ -217,13 +255,24 @@ pub fn simulate_p2p_consensus_gossip(
         });
     }
 
+    // Create a dummy block for simulation
+    let dummy_block = goldchain_types::Block::new(
+        1,
+        1000,
+        Hash([0u8; 32]),
+        Hash([0u8; 32]),
+        goldchain_crypto::address::Address::from_public_key(&validator_keys[0].0.public_key()),
+        Vec::new(),
+    );
+    let block_hash = dummy_block.hash();
+
     let mut packet_queue = Vec::new();
 
     // Node 0 proposes the block
     let proposal_msg = GossipMessage::BlockProposal {
         height: 1,
         round: 0,
-        block_hash,
+        block: dummy_block.clone(),
     };
 
     // Node 0 proposes locally
@@ -281,9 +330,22 @@ pub fn simulate_p2p_consensus_gossip(
 
             // Apply consensus logic on the recipient based on the message
             match packet.message {
-                GossipMessage::BlockProposal { height, round, block_hash: p_hash } => {
+                GossipMessage::BlockProposal { height, round, block: p_block } => {
+                    let p_hash = p_block.hash();
                     if nodes[idx].state.height == height && nodes[idx].state.round == round {
                         if nodes[idx].state.step == ConsensusStep::Propose {
+                            // Verify that the proposer is the designated leader for this height and round
+                            let expected_leader_idx = ((height - 1) as usize + round as usize) % nodes[idx].state.validators.len();
+                            let expected_leader_pubkey = &nodes[idx].state.validators[expected_leader_idx].pubkey;
+                            let proposer_pubkey = match p_block.header.validator.to_public_key() {
+                                Ok(pk) => pk,
+                                Err(_) => continue,
+                            };
+                            if &proposer_pubkey != expected_leader_pubkey {
+                                continue;
+                            }
+
+                            let _ = nodes[idx].state.verify_and_record_proposal(&p_block, &storage);
                             nodes[idx].state.propose_block(p_hash)?;
                             
                             // Cast prevote
@@ -348,6 +410,7 @@ pub fn simulate_p2p_consensus_gossip(
     // Now, assert that all nodes reached the Commit step and successfully committed the block!
     for node in &mut nodes {
         if node.state.step != ConsensusStep::Commit {
+            let _ = std::fs::remove_file("sim_gossip_temp.redb");
             return Err(CoreError::InvalidBlock(format!(
                 "Node {} failed to reach Commit step, current step: {:?}",
                 node.address, node.state.step
@@ -356,6 +419,7 @@ pub fn simulate_p2p_consensus_gossip(
         // Advance height network-wide as block is committed!
         node.state.advance_height();
         if node.state.height != 2 {
+            let _ = std::fs::remove_file("sim_gossip_temp.redb");
             return Err(CoreError::InvalidBlock(format!(
                 "Node {} failed to advance height to 2",
                 node.address
@@ -363,6 +427,7 @@ pub fn simulate_p2p_consensus_gossip(
         }
     }
 
+    let _ = std::fs::remove_file("sim_gossip_temp.redb");
     Ok(())
 }
 

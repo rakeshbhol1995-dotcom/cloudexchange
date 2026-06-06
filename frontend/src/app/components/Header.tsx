@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { LogOut, Menu, X, ShieldAlert } from "lucide-react";
+import { LogOut, Menu, X, ShieldAlert, ArrowLeft } from "lucide-react";
 import CloudExchangeLogo from "./CloudExchangeLogo";
 
 interface HeaderProps {
@@ -51,7 +51,38 @@ export default function Header({ activeTab }: HeaderProps) {
         padding: "0 24px",
         justifyContent: "space-between"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {/* Circular Glassmorphic Back Button */}
+          <button 
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                window.history.back();
+              } else {
+                window.location.href = "/";
+              }
+            }}
+            className="hdr-back-button"
+            title="Go Back"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              background: "rgba(255, 255, 255, 0.04)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+              outline: "none",
+              backdropFilter: "blur(12px)",
+              flexShrink: 0
+            }}
+          >
+            <ArrowLeft size={18} />
+          </button>
+
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
             <CloudExchangeLogo size={32} />
             <span style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", letterSpacing: -0.5 }}>
@@ -331,6 +362,13 @@ export default function Header({ activeTab }: HeaderProps) {
 
       {/* CSS overrides inside style tag to dynamically display menu elements */}
       <style jsx global>{`
+        .hdr-back-button:hover {
+          background: rgba(255, 255, 255, 0.08) !important;
+          border-color: var(--yellow) !important;
+          color: var(--yellow) !important;
+          transform: translateX(-3px);
+          box-shadow: 0 0 15px rgba(245, 166, 35, 0.2);
+        }
         @media (max-width: 768px) {
           .hide-on-mobile {
             display: none !important;

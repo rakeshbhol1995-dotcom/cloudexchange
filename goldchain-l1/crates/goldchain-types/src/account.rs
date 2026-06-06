@@ -7,6 +7,7 @@ pub struct Account {
     pub nonce: u64,
     pub staked: u64,
     pub code: Option<Vec<u8>>,
+    pub unbonding_unlocks: Vec<(u64, u64)>,
 }
 
 impl Account {
@@ -17,6 +18,7 @@ impl Account {
             nonce,
             staked: 0,
             code: None,
+            unbonding_unlocks: Vec::new(),
         }
     }
 }

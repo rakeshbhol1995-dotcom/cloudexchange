@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Activity, ShieldCheck, Cpu, ArrowRight, LogOut, CheckCircle, Smartphone, HelpCircle, Menu, X } from "lucide-react";
 import CloudExchangeLogo from "./components/CloudExchangeLogo";
 import SpaceBackground from "./components/SpaceBackground";
+import Footer from "./components/Footer";
 
 const MARKETS = [
   { symbol: "BTC", name: "Bitcoin", price: 65050, change: 2.45, vol: "$836M", icon: "₿" },
@@ -73,9 +74,10 @@ export default function HomePage() {
         // Fallback: simple simulated price moves so UI always looks alive
         setMarketsList(prev => prev.map(m => {
           const delta = (Math.random() - 0.48) * (m.price * 0.001);
+          const decimals = m.price < 0.0001 ? 8 : m.price < 1 ? 6 : m.price < 10 ? 4 : 2;
           return {
             ...m,
-            price: +(m.price + delta).toFixed(m.price < 2 ? 4 : 2),
+            price: +(m.price + delta).toFixed(decimals),
             change: +(m.change + (Math.random() - 0.5) * 0.05).toFixed(2)
           };
         }));
@@ -316,7 +318,7 @@ export default function HomePage() {
                         </div>
                       </div>
                       <div style={{ textAlign: "right", fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
-                        ${m.price < 2 ? m.price.toFixed(4) : m.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ${m.price < 0.0001 ? m.price.toFixed(8) : m.price < 1 ? m.price.toFixed(6) : m.price < 10 ? m.price.toFixed(4) : m.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <span style={{
@@ -346,7 +348,7 @@ export default function HomePage() {
             <div key={i} className="bn-ticker-item" style={{ borderRight: "1px solid var(--border)" }}>
               <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{m.symbol}/USDT</span>
               <span style={{ color: m.change >= 0 ? "var(--green)" : "var(--red)" }}>
-                ${m.price < 2 ? m.price.toFixed(4) : m.price.toLocaleString()}
+                ${m.price < 0.0001 ? m.price.toFixed(8) : m.price < 1 ? m.price.toFixed(6) : m.price < 10 ? m.price.toFixed(4) : m.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               <span style={{ color: m.change >= 0 ? "var(--green)" : "var(--red)", fontSize: 11 }}>
                 {m.change >= 0 ? "+" : ""}{m.change}%
@@ -727,73 +729,7 @@ export default function HomePage() {
       </section>
 
       {/* ─── FOOTER ─── */}
-      <footer style={{
-        background: "rgba(10, 17, 40, 0.75)",
-        backdropFilter: "blur(12px)",
-        borderTop: "1px solid var(--border)",
-        padding: "64px 0 32px",
-        fontSize: 13,
-        color: "var(--text-secondary)"
-      }}>
-        <div className="container-xl">
-          <div className="footer-grid">
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                <CloudExchangeLogo size={24} />
-                <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>
-                  Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
-                </span>
-              </div>
-              <p style={{ lineHeight: 1.8, marginBottom: 24 }}>
-                Sub-microsecond high-performance decentralized ledger execution matching portal.
-              </p>
-              <div style={{ display: "flex", gap: 12 }}>
-                {["𝕏", "Discord", "Telegram", "Github"].map((s) => (
-                  <button key={s} style={{
-                    background: "var(--bg-hover)",
-                    border: "none",
-                    color: "var(--text-primary)",
-                    borderRadius: 6,
-                    padding: "6px 12px",
-                    cursor: "pointer",
-                    fontSize: 11,
-                    fontWeight: 600
-                  }}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {[
-              { title: "Core Features", links: [["Terminal", "/trade"], ["P2P Escrow", "/p2p"], ["KYC Liveness", "/kyc"], ["Ledger Audit", "/ledger"]] },
-              { title: "Technical Layers", links: [["API Whitelist", "#"], ["Shadow Replay", "#"], ["Disruptor Buffer", "#"], ["FIX Gateway", "#"]] },
-              { title: "Legal & Support", links: [["Help Center", "#"], ["Security Audits", "#"], ["Terms of Service", "#"], ["Privacy Policy", "#"]] }
-            ].map((col, idx) => (
-              <div key={idx}>
-                <h4 style={{ color: "var(--text-primary)", fontWeight: 700, marginBottom: 16 }}>{col.title}</h4>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {col.links.map((link, lidx) => (
-                    <Link key={lidx} href={link[1]} style={{ color: "var(--text-secondary)", textDecoration: "none" }}
-                      onMouseEnter={e => e.currentTarget.style.color = "var(--yellow)"}
-                      onMouseLeave={e => e.currentTarget.style.color = "var(--text-secondary)"}>
-                      {link[0]}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="footer-bottom">
-            <span>© 2026 CloudExchange Group. All rights reserved.</span>
-            <div style={{ display: "flex", gap: 16 }}>
-              <a href="#" style={{ color: "var(--text-secondary)", textDecoration: "none" }}>Risk Warning</a>
-              <a href="#" style={{ color: "var(--text-secondary)", textDecoration: "none" }}>Cookie Preferences</a>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

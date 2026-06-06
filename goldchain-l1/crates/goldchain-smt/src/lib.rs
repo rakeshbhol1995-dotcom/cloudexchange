@@ -6,7 +6,7 @@ pub use proof::SmtProof;
 
 pub struct SparseMerkleTrie<S: NodeStore> {
     root: [u8; 32],
-    store: S,
+    pub store: S,
     default_hashes: [[u8; 32]; 257],
 }
 
@@ -19,6 +19,15 @@ impl<S: NodeStore> SparseMerkleTrie<S> {
             default_hashes[i + 1] = Self::hash_branch(&default_hashes[i], &default_hashes[i]);
         }
         let root = default_hashes[256];
+        SparseMerkleTrie { root, store, default_hashes }
+    }
+
+    /// Reconstructs a Sparse Merkle Trie with a given store and existing root hash
+    pub fn new_with_root(store: S, root: [u8; 32]) -> Self {
+        let mut default_hashes = [[0u8; 32]; 257];
+        for i in 0..256 {
+            default_hashes[i + 1] = Self::hash_branch(&default_hashes[i], &default_hashes[i]);
+        }
         SparseMerkleTrie { root, store, default_hashes }
     }
 

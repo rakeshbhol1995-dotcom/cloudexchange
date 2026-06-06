@@ -2,10 +2,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 
-import { LogOut, LayoutGrid, Search, Play, Pause, Trash2, ArrowUpRight, Key, ShieldCheck, Eye, EyeOff, Trash, Wallet } from "lucide-react";
+import { LogOut, LayoutGrid, Search, Play, Pause, Trash2, ArrowUpRight, Key, ShieldCheck, Eye, EyeOff, Trash, Wallet, ArrowLeft } from "lucide-react";
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
 import { generateDeviceFingerprint, DeviceFingerprint } from "../utils/fingerprint";
+import { API_URL } from "../utils/api";
 
 interface OrderLevel { price: number; size: number; total: number; }
 interface Trade { time: string; price: number; size: number; side: "BUY" | "SELL"; }
@@ -22,6 +23,7 @@ interface UserOrder {
   leverage?: number;
   takeProfitPrice?: number;
   stopLossPrice?: number;
+  stopPrice?: number;
   callbackRate?: number;
   activationPrice?: number;
   highestPriceTracked?: number;
@@ -105,7 +107,7 @@ const BASE_COINS = [
   { symbol: "AVAX", price: 37.2,  change: 1.8,  vol: "380M" },
   { symbol: "SHIB", price: 0.000024, change: 8.45, vol: "290M" },
   { symbol: "DOT", price: 6.85, change: -1.15, vol: "164M" },
-  { symbol: "MATIC", price: 0.72, change: -0.85, vol: "188M" },
+  { symbol: "MATIC", price: 0.093, change: -0.85, vol: "188M" },
   { symbol: "LINK", price: 15.4, change: 2.50, vol: "245M" },
   { symbol: "UNI", price: 7.85, change: -3.20, vol: "176M" },
   { symbol: "LTC", price: 82.4, change: 1.10, vol: "192M" },
@@ -116,7 +118,7 @@ const BASE_COINS = [
   { symbol: "OP", price: 2.45, change: 2.15, vol: "154M" },
   { symbol: "ARB", price: 0.98, change: -1.75, vol: "173M" },
   { symbol: "INJ", price: 24.5, change: 4.80, vol: "181M" },
-  { symbol: "RNDR", price: 8.12, change: 6.30, vol: "224M" },
+  { symbol: "RNDR", price: 1.896, change: 6.30, vol: "224M" },
   { symbol: "AAVE", price: 92.4, change: -2.30, vol: "118M" },
   { symbol: "MKR", price: 2420, change: 1.50, vol: "85M" },
   { symbol: "RUNE", price: 5.42, change: 7.20, vol: "128M" },
@@ -217,12 +219,13 @@ const PAIRS = generatePAIRS();
 function generateBook(center: number): { bids: OrderLevel[]; asks: OrderLevel[] } {
   const bids: OrderLevel[] = []; const asks: OrderLevel[] = [];
   let bt = 0, at = 0;
+  const decimals = center < 0.0001 ? 8 : center < 1 ? 6 : center < 10 ? 4 : 2;
   for (let i = 1; i <= 12; i++) {
     const bsize = +(Math.random() * 3 + 0.05).toFixed(3);
     const asize = +(Math.random() * 3 + 0.05).toFixed(3);
     bt += bsize; at += asize;
-    bids.push({ price: +(center * (1 - i * 0.00035)).toFixed(2), size: bsize, total: +bt.toFixed(3) });
-    asks.push({ price: +(center * (1 + i * 0.00035)).toFixed(2), size: asize, total: +at.toFixed(3) });
+    bids.push({ price: +(center * (1 - i * 0.00035)).toFixed(decimals), size: bsize, total: +bt.toFixed(3) });
+    asks.push({ price: +(center * (1 + i * 0.00035)).toFixed(decimals), size: asize, total: +at.toFixed(3) });
   }
   return { bids: bids.reverse(), asks };
 }
@@ -256,6 +259,8 @@ export default function TradePage() {
   const [timeframe, setTimeframe] = useState("15m");
   const [posTab, setPosTab] = useState("Open Orders");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"chart" | "trade" | "book" | "orders">("chart");
+  const [showMobileMarkets, setShowMobileMarkets] = useState(false);
   
   // Account state
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -283,7 +288,11 @@ export default function TradePage() {
   const [chartData, setChartData] = useState<Candle[]>([]);
   const [candleWidth, setCandleWidth] = useState<number>(8); // zoom level
   const [scrollOffset, setScrollOffset] = useState<number>(0); // pan offset
-  const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
+  const [canvasSize, setCanvasSize] = useState({
+    width: typeof window !== "undefined" ? window.innerWidth : 1200,
+    height: typeof window !== "undefined" ? window.innerHeight : 800
+  });
+  const [isDesktop, setIsDesktop] = useState(true);
 
   // Handle canvas resize — use ResizeObserver on canvas itself for pixel-perfect sizing
   useEffect(() => {
@@ -293,7 +302,7 @@ export default function TradePage() {
     const updateSize = () => {
       const rect = canvas.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
-        setWindowSize({ width: rect.width, height: rect.height });
+        setCanvasSize({ width: rect.width, height: rect.height });
       }
     };
 
@@ -304,6 +313,16 @@ export default function TradePage() {
     return () => ro.disconnect();
   }, []);
 
+  // Sync window resize for desktop check
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth > 768);
+    };
+    handleResize(); // run once initially
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Sync login status, wallet balance, API keys, and custom trading pairs
   useEffect(() => {
     const logged = localStorage.getItem("user_logged_in");
@@ -311,6 +330,7 @@ export default function TradePage() {
     if (logged === "true") {
       setIsLoggedIn(true);
       setUserEmail(storedEmail || "institutional_trader@cloud.ex");
+      fetchOrders();
     }
 
     const storedBalance = localStorage.getItem("wallet_balance");
@@ -387,6 +407,28 @@ export default function TradePage() {
     }
   };
 
+  const updateUserAssetBalance = (symbol: string, changeAmount: number) => {
+    try {
+      const stored = localStorage.getItem("user_asset_balances");
+      if (stored) {
+        const assets: any[] = JSON.parse(stored);
+        const updated = assets.map(a => {
+          if (a.symbol === symbol) {
+            return { ...a, amount: +(a.amount + changeAmount).toFixed(6) };
+          }
+          return a;
+        });
+        if (!updated.some(a => a.symbol === symbol)) {
+          updated.push({ symbol, name: `${symbol} Token`, amount: +changeAmount.toFixed(6), inOrder: 0.00, color: "#FFA143" });
+        }
+        localStorage.setItem("user_asset_balances", JSON.stringify(updated));
+        window.dispatchEvent(new Event("storage"));
+      }
+    } catch (err) {
+      console.error("Error updating user asset balance: ", err);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("user_logged_in");
     localStorage.removeItem("username");
@@ -404,7 +446,8 @@ export default function TradePage() {
         
         setTradingPairs(prev => prev.map(p => {
           const cleanSym = p.symbol.replace("/USDT", "");
-          const apiItem = data.find((item: any) => item.symbol === `${cleanSym}USDT`);
+          const targetSymbol = cleanSym === "MATIC" ? "POLUSDT" : (cleanSym === "RNDR" ? "RENDERUSDT" : `${cleanSym}USDT`);
+          const apiItem = data.find((item: any) => item.symbol === targetSymbol);
           if (apiItem) {
             return {
               ...p,
@@ -434,14 +477,19 @@ export default function TradePage() {
   // 1. Fetch real historical candles from Binance REST API on symbol/timeframe change
   useEffect(() => {
     let active = true;
-    const cleanSym = activePair.symbol.replace("/", "");
+    let binanceSym = activePair.symbol.replace("/", "");
+    if (binanceSym === "MATICUSDT") {
+      binanceSym = "POLUSDT";
+    } else if (binanceSym === "RNDRUSDT") {
+      binanceSym = "RENDERUSDT";
+    }
     
     // Map to Binance timeframe parameter
     const binanceInterval = timeframe === "1H" ? "1h" : timeframe === "4H" ? "4h" : timeframe === "1D" ? "1d" : timeframe;
 
     const fetchBinanceCandles = async () => {
       try {
-        const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${cleanSym}&interval=${binanceInterval}&limit=150`);
+        const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${binanceSym}&interval=${binanceInterval}&limit=150`);
         if (!res.ok) throw new Error("Binance candles offline");
         const data = await res.json();
         
@@ -621,6 +669,17 @@ export default function TradePage() {
             orderFilled = true;
             alertMsg = fillMsg;
             if (payout > 0) newBalanceChange += payout;
+
+            // Update baseSymbol asset balance upon fill
+            if (!order.leverage) {
+              const baseSym = order.pair.split("/")[0];
+              if (order.side === "Buy") {
+                updateUserAssetBalance(baseSym, order.amount);
+              } else {
+                updateUserAssetBalance(baseSym, -order.amount);
+              }
+            }
+
             setOrderHistory(history => [
               { ...order, status: "Filled", filled: "100%", price: np },
               ...history
@@ -660,14 +719,20 @@ export default function TradePage() {
       let currentPrice = startingPrice;
       fallbackInterval = setInterval(() => {
         const delta = (Math.random() - 0.485) * (startingPrice * 0.00035);
-        const np = Math.max(0.0001, +(currentPrice + delta).toFixed(4));
+        const decimals = startingPrice < 0.0001 ? 8 : startingPrice < 1 ? 6 : startingPrice < 10 ? 4 : 2;
+        const minPrice = startingPrice < 0.0001 ? 0.00000001 : startingPrice < 1 ? 0.000001 : 0.01;
+        const np = Math.max(minPrice, +(currentPrice + delta).toFixed(decimals));
         currentPrice = np;
         onPriceUpdate(np);
       }, 1000);
     };
 
-    // Start WebSocket
-    const cleanSym = activePair.symbol.replace("/", "").toLowerCase();
+    let cleanSym = activePair.symbol.replace("/", "").toLowerCase();
+    if (cleanSym === "maticusdt") {
+      cleanSym = "polusdt";
+    } else if (cleanSym === "rndrusdt") {
+      cleanSym = "renderusdt";
+    }
     try {
       ws = new WebSocket(`wss://stream.binance.com:9443/ws/${cleanSym}@ticker`);
       ws.onopen = () => {
@@ -772,9 +837,9 @@ export default function TradePage() {
     const canvas = canvas2dRef.current; if (!canvas) return;
     const ctx = canvas.getContext("2d"); if (!ctx) return;
 
-    // Use windowSize from ResizeObserver; fall back to getBoundingClientRect
-    const W = windowSize.width > 0 ? windowSize.width : canvas.getBoundingClientRect().width || 600;
-    const H = windowSize.height > 0 ? windowSize.height : canvas.getBoundingClientRect().height || 400;
+    // Use canvasSize from ResizeObserver; fall back to getBoundingClientRect
+    const W = canvasSize.width > 0 ? canvasSize.width : canvas.getBoundingClientRect().width || 600;
+    const H = canvasSize.height > 0 ? canvasSize.height : canvas.getBoundingClientRect().height || 400;
 
     if (W <= 0 || H <= 0) return;
 
@@ -1146,10 +1211,36 @@ export default function TradePage() {
       ctx.textAlign = "left";
       ctx.fillText(`${activePair.symbol} • ${timeframe} • Live Market Feed`, 10, 18);
     }
-  }, [chartData, chartType, mousePos, timeframe, activePair, candleWidth, scrollOffset, windowSize]);
+  }, [chartData, chartType, mousePos, timeframe, activePair, candleWidth, scrollOffset, canvasSize]);
+
+  // Fetch all orders from backend
+  async function fetchOrders() {
+    try {
+      const res = await fetch(`${API_URL}/orders/list`);
+      const data = await res.json();
+      if (res.ok && data.success && data.orders) {
+        const mappedOrders = data.orders.map((o: any) => ({
+          id: o.id,
+          time: new Date(o.timestamp || Date.now()).toLocaleTimeString([], { hour12: false }),
+          pair: o.pair,
+          type: o.type,
+          side: o.side === "BUY" || o.side === "Buy" ? "Buy" : "Sell",
+          price: o.price,
+          amount: o.quantity,
+          filled: `${((o.filled / o.quantity) * 100).toFixed(0)}%`,
+          status: o.status === "PENDING" || o.status === "New" ? "New" : o.status === "FILLED" ? "Filled" : "Cancelled"
+        }));
+        
+        setOpenOrders(mappedOrders.filter((o: any) => o.status === "New"));
+        setOrderHistory(mappedOrders.filter((o: any) => o.status !== "New"));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch orders from backend:", err);
+    }
+  }
 
   // Order submission
-  const handlePlaceOrder = (e: React.FormEvent) => {
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isHalted) {
       setAlertText("Emergency Halt Active: Order matching has been suspended by the Control Plane.");
@@ -1212,39 +1303,54 @@ export default function TradePage() {
       return;
     }
 
-    // Deduct margin/balance
-    if (side === "Buy" || isFutures) {
-      updateWalletBalance(prev => +(prev - marginRequired).toFixed(2));
+    const baseSymbol = activePair.symbol.split("/")[0];
+    if (side === "Sell" && !isFutures) {
+      try {
+        const stored = localStorage.getItem("user_asset_balances");
+        if (stored) {
+          const assets: any[] = JSON.parse(stored);
+          const asset = assets.find((a: any) => a.symbol === baseSymbol);
+          if (!asset || asset.amount < qty) {
+            setAlertText(`Insufficient ${baseSymbol} balance to sell.`);
+            setTimeout(() => setAlertText(""), 3000);
+            return;
+          }
+        }
+      } catch (e) {}
     }
 
-    const newOrder: UserOrder = {
-      id: Math.random().toString(36).substring(2, 9).toUpperCase(),
-      time: new Date().toLocaleTimeString([], { hour12: false }),
-      pair: activePair.symbol + (isFutures ? ` [${leverage}x]` : ""),
-      type: orderTab + (isFutures ? " (Futures)" : ""),
-      side: side,
-      price: orderP,
-      amount: qty,
-      filled: orderTab === "Market" ? "100%" : "0%",
-      status: orderTab === "Market" ? "Filled" : "New",
-      leverage: isFutures ? leverage : undefined,
-      takeProfitPrice: tpPrice,
-      stopLossPrice: slPrice,
-      callbackRate: cbRate,
-      activationPrice: actPrice,
-      highestPriceTracked: orderTab === "Trailing Stop" ? price : undefined,
-      lowestPriceTracked: orderTab === "Trailing Stop" ? price : undefined
-    };
-
-    if (orderTab === "Market") {
-      setOrderHistory(prev => [newOrder, ...prev]);
-      if (!isFutures && side === "Sell") {
-        updateWalletBalance(prev => +(prev + cost).toFixed(2));
+    const userId = localStorage.getItem("user_id") || "usr-fallback";
+    
+    // Call backend API to place order
+    try {
+      const res = await fetch(`${API_URL}/orders/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          pair: activePair.symbol,
+          side: side.toUpperCase(),
+          price: orderP,
+          quantity: qty,
+          type: orderTab
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        // Deduct margin/balance
+        if (side === "Buy" || isFutures) {
+          updateWalletBalance(prev => +(prev - marginRequired).toFixed(2));
+        } else if (side === "Sell" && !isFutures) {
+          updateUserAssetBalance(baseSymbol, -qty);
+        }
+        
+        setAlertText(`Order Submitted: ${orderTab} ${side} ${qty} ${baseSymbol} submitted successfully.`);
+        fetchOrders();
+      } else {
+        setAlertText(data.error || "Order placement failed.");
       }
-      setAlertText(`Market Order Executed! Filled ${qty} ${activePair.symbol.split("/")[0]} at $${orderP}`);
-    } else {
-      setOpenOrders(prev => [newOrder, ...prev]);
-      setAlertText(`Order Submitted: ${orderTab} ${side} ${qty} ${activePair.symbol.split("/")[0]} submitted successfully.`);
+    } catch (err: any) {
+      setAlertText("Order placement failed: " + err.message);
     }
 
     setOrderQty("");
@@ -1359,7 +1465,6 @@ export default function TradePage() {
     }
   }, []);
 
-  const isDesktop = windowSize.width > 768;
   const maxBidTotal = bids.length ? Math.max(...bids.map(b => b.total), 1) : 1;
   const maxAskTotal = asks.length ? Math.max(...asks.map(a => a.total), 1) : 1;
 
@@ -1377,22 +1482,86 @@ export default function TradePage() {
         height: 56,
         display: "flex",
         alignItems: "center",
-        padding: "0 16px",
-        gap: 16,
+        padding: isDesktop ? "0 16px" : "0 8px",
+        gap: isDesktop ? 16 : 4,
         flexShrink: 0,
         zIndex: 100
       }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
-          <CloudExchangeLogo size={24} />
-          <span style={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)" }}>
-            Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
-          </span>
-        </Link>
+        <div style={{ display: "flex", alignItems: "center", gap: isDesktop ? 12 : 4 }}>
+          {/* Circular Glassmorphic Back Button */}
+          <button 
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                window.history.back();
+              } else {
+                window.location.href = "/";
+              }
+            }}
+            title="Go Back"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 32,
+              height: 32,
+              borderRadius: "50%",
+              background: "rgba(255, 255, 255, 0.04)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+              outline: "none",
+              backdropFilter: "blur(12px)",
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+              e.currentTarget.style.borderColor = "var(--yellow)";
+              e.currentTarget.style.color = "var(--yellow)";
+              e.currentTarget.style.transform = "translateX(-3px)";
+              e.currentTarget.style.boxShadow = "0 0 15px rgba(245, 166, 35, 0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+              e.currentTarget.style.color = "var(--text-secondary)";
+              e.currentTarget.style.transform = "none";
+              e.currentTarget.style.boxShadow = "none";
+            }}
+          >
+            <ArrowLeft size={16} />
+          </button>
+
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+            <CloudExchangeLogo size={24} />
+            <span style={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)" }} className="hide-mobile">
+              Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
+            </span>
+          </Link>
+        </div>
         <div style={{ width: 1, height: 24, background: "var(--border)" }} />
         
         {/* Active Trading Pair info */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-          <span style={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)" }}>
+        <div 
+          onClick={() => {
+            if (!isDesktop) {
+              setShowMobileMarkets(true);
+            }
+          }}
+          style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            gap: isDesktop ? 6 : 4, 
+            whiteSpace: "nowrap",
+            cursor: !isDesktop ? "pointer" : "default",
+            padding: !isDesktop ? "4px 6px" : "0",
+            borderRadius: !isDesktop ? "6px" : "0",
+            background: !isDesktop ? "rgba(255, 255, 255, 0.03)" : "none",
+            border: !isDesktop ? "1px solid var(--border)" : "none",
+            transition: "all 0.2s"
+          }}
+        >
+          <span style={{ fontSize: isDesktop ? 16 : 12, fontWeight: 800, color: "var(--text-primary)" }}>
             {activePair.symbol}{tradingMode === "FUTURES" && "-PERP"}
           </span>
           <span style={{
@@ -1403,8 +1572,11 @@ export default function TradePage() {
             borderRadius: 4,
             fontWeight: 700
           }}>
-            {tradingMode === "SPOT" ? "SPOT" : `${leverage}x FUTURES`}
+            {tradingMode === "SPOT" ? "SPOT" : `${leverage}x`}
           </span>
+          {!isDesktop && (
+            <span style={{ fontSize: 10, color: "var(--yellow)", marginLeft: 2 }}>▼</span>
+          )}
           {tradingMode === "FUTURES" && (
             <>
               <div className="header-funding-info" style={{ borderLeft: "1px solid var(--border-light)", paddingLeft: 8, display: "flex", flexDirection: "column" }}>
@@ -1431,9 +1603,9 @@ export default function TradePage() {
         <div style={{ display: "flex", gap: 24, flex: 1, fontSize: 12, marginLeft: 8, overflow: "hidden" }} className="hide-mobile">
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: price >= activePair.price ? "var(--green)" : "var(--red)" }}>
-              ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${price < 0.0001 ? price.toFixed(8) : price < 1 ? price.toFixed(6) : price < 10 ? price.toFixed(4) : price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div style={{ color: "var(--text-secondary)", fontSize: 10 }}>≈ ${price.toLocaleString()}</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 10 }}>≈ ${price < 1 ? price.toFixed(6) : price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </div>
           {[
             { label: "24h Change", value: `${activePair.change >= 0 ? "+" : ""}${activePair.change}%`, color: activePair.change >= 0 ? "var(--green)" : "var(--red)" },
@@ -1545,11 +1717,58 @@ export default function TradePage() {
         </div>
       )}
 
+      {/* Mobile Stats Sub-header */}
+      {!isDesktop && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "8px 16px",
+          background: "rgba(6, 11, 30, 0.5)",
+          borderBottom: "1px solid var(--border-light)",
+          flexShrink: 0,
+          zIndex: 90
+        }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontSize: 18, fontWeight: 800, color: price >= activePair.price ? "var(--green)" : "var(--red)" }}>
+              ${price < 0.0001 ? price.toFixed(8) : price < 1 ? price.toFixed(6) : price < 10 ? price.toFixed(4) : price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span style={{ fontSize: 11, color: activePair.change >= 0 ? "var(--green)" : "var(--red)", fontWeight: 700 }}>
+              {activePair.change >= 0 ? "+" : ""}{activePair.change}%
+            </span>
+          </div>
+          <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>
+            24h Vol: <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{activePair.vol}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Navigation Tabs */}
+      {!isDesktop && (
+        <div className="mobile-tabs-switcher">
+          {[
+            { id: "chart", label: "📊 Chart" },
+            { id: "trade", label: "⚡ Trade" },
+            { id: "book", label: "📖 Order Book" },
+            { id: "orders", label: "📂 Orders" }
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setMobileTab(t.id as any)}
+              className={`mobile-tab-btn ${mobileTab === t.id ? "active" : ""}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ─── MAIN TRADING MODULES ─── */}
-      <div className="trade-main-grid">
+      <div className="trade-main-grid" style={{ display: isDesktop ? "grid" : (mobileTab !== "orders" ? "grid" : "none") }}>
         
         {/* LEFT PANEL: Order Book */}
-        <div className="trade-order-book-panel" style={{ background: "rgba(10, 17, 40, 0.45)", backdropFilter: "blur(12px)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        <div className="trade-order-book-panel" style={{ background: "rgba(10, 17, 40, 0.45)", backdropFilter: "blur(12px)", borderRight: "1px solid var(--border)", display: isDesktop ? "flex" : (mobileTab === "book" ? "flex" : "none"), flexDirection: "column", overflow: "hidden", position: "relative" }}>
           <div style={{ padding: "12px 16px 8px", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>Order Book</span>
             <span style={{ fontSize: 10, color: "var(--cyan)", background: "var(--cyan-dim)", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>REAL-TIME</span>
@@ -1563,11 +1782,11 @@ export default function TradePage() {
 
           {/* ASKS (sells, ordered high to low, showing top list descending) */}
           <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column-reverse" }}>
-            {asks.slice(0, windowSize.width > 0 && windowSize.width <= 768 ? 4 : 10).map((a, i) => (
+            {asks.slice(0, !isDesktop ? 8 : 10).map((a, i) => (
               <div key={i} style={{ position: "relative", height: 20 }}>
                 <div className="ob-bar-ask" style={{ width: `${(a.total / maxAskTotal) * 100}%` }} />
                 <div className="ob-row" style={{ height: "100%", position: "relative", zIndex: 1 }}>
-                  <span style={{ color: "var(--red)", fontWeight: 700 }}>{a.price.toFixed(2)}</span>
+                  <span style={{ color: "var(--red)", fontWeight: 700 }}>{a.price < 0.0001 ? a.price.toFixed(8) : a.price < 1 ? a.price.toFixed(6) : a.price < 10 ? a.price.toFixed(4) : a.price.toFixed(2)}</span>
                   <span style={{ color: "var(--text-primary)", textAlign: "center" }}>{a.size.toFixed(3)}</span>
                   <span style={{ color: "var(--text-secondary)", textAlign: "right" }}>{a.total.toFixed(3)}</span>
                 </div>
@@ -1578,7 +1797,7 @@ export default function TradePage() {
           {/* Spread bar */}
           <div style={{ padding: "8px 16px", background: "rgba(0,0,0,0.15)", borderTop: "1px solid var(--border-light)", borderBottom: "1px solid var(--border-light)", textAlign: "center" }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: "var(--green)" }}>
-              ${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              ${price < 0.0001 ? price.toFixed(8) : price < 1 ? price.toFixed(6) : price < 10 ? price.toFixed(4) : price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </div>
             <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 2 }}>
               MARKET SPREAD LOGS VERIFIED
@@ -1587,11 +1806,11 @@ export default function TradePage() {
 
           {/* BIDS (buys) */}
           <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-            {bids.slice(0, windowSize.width > 0 && windowSize.width <= 768 ? 4 : 10).map((b, i) => (
+            {bids.slice(0, !isDesktop ? 8 : 10).map((b, i) => (
               <div key={i} style={{ position: "relative", height: 20 }}>
                 <div className="ob-bar-bid" style={{ width: `${(b.total / maxBidTotal) * 100}%` }} />
                 <div className="ob-row" style={{ height: "100%", position: "relative", zIndex: 1 }}>
-                  <span style={{ color: "var(--green)", fontWeight: 700 }}>{b.price.toFixed(2)}</span>
+                  <span style={{ color: "var(--green)", fontWeight: 700 }}>{b.price < 0.0001 ? b.price.toFixed(8) : b.price < 1 ? b.price.toFixed(6) : b.price < 10 ? b.price.toFixed(4) : b.price.toFixed(2)}</span>
                   <span style={{ color: "var(--text-primary)", textAlign: "center" }}>{b.size.toFixed(3)}</span>
                   <span style={{ color: "var(--text-secondary)", textAlign: "right" }}>{b.total.toFixed(3)}</span>
                 </div>
@@ -1601,10 +1820,10 @@ export default function TradePage() {
         </div>
 
         {/* CENTER PANEL: Chart + Order Input */}
-        <div className="trade-center-panel" style={{ display: "flex", flexDirection: "column", overflow: "hidden", borderRight: "1px solid var(--border)", minHeight: 0 }}>
+        <div className="trade-center-panel" style={{ display: isDesktop ? "flex" : ((mobileTab === "chart" || mobileTab === "trade") ? "flex" : "none"), flexDirection: "column", overflow: "hidden", borderRight: isDesktop ? "1px solid var(--border)" : "none", minHeight: 0 }}>
           
           {/* Chart Header Options */}
-          <div className="trade-chart-options-header" style={{ background: "rgba(6, 11, 30, 0.85)", backdropFilter: "blur(16px)", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: 44, flexShrink: 0 }}>
+          <div className="trade-chart-options-header" style={{ background: "rgba(6, 11, 30, 0.85)", backdropFilter: "blur(16px)", borderBottom: "1px solid rgba(255,255,255,0.06)", display: isDesktop ? "flex" : (mobileTab === "chart" ? "flex" : "none"), alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: 44, flexShrink: 0 }}>
             {/* Timeframe selectors */}
             <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
               {["1m", "5m", "15m", "1H", "4H", "1D"].map(t => (
@@ -1669,7 +1888,7 @@ export default function TradePage() {
           </div>
 
           {/* Interactive Chart Workspace — full-bleed, no padding */}
-          <div className="trade-chart-workspace" style={{ flex: 1, background: "#040810", position: "relative", overflow: "hidden" }}>
+          <div className="trade-chart-workspace" style={{ flex: 1, background: "#040810", position: "relative", overflow: "hidden", display: isDesktop ? "block" : (mobileTab === "chart" ? "block" : "none") }}>
             <canvas
               ref={canvas2dRef}
               style={{
@@ -1688,7 +1907,7 @@ export default function TradePage() {
           </div>
 
           {/* Order Forms Panel */}
-          <div className="trade-order-form-panel" style={{ background: "rgba(10, 17, 40, 0.75)", backdropFilter: "blur(12px)", borderTop: "1px solid var(--border)", padding: isDesktop ? "12px 20px" : "16px 20px", flexShrink: 0 }}>
+          <div className="trade-order-form-panel" style={{ background: "rgba(10, 17, 40, 0.75)", backdropFilter: "blur(12px)", borderTop: isDesktop ? "1px solid var(--border)" : "none", padding: isDesktop ? "12px 20px" : "16px 20px", flexShrink: 0, display: isDesktop ? "block" : (mobileTab === "trade" ? "block" : "none") }}>
             <form onSubmit={handlePlaceOrder} style={{ display: "flex", flexDirection: isDesktop ? "row" : "column", gap: isDesktop ? 24 : 12 }}>
               {/* Left Column: Toggles and Submit button */}
               <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 10 }}>
@@ -1902,12 +2121,17 @@ export default function TradePage() {
         </div>
 
         {/* RIGHT PANEL: Pair List + Trade History */}
-        <div className="trade-right-panel" style={{ background: "rgba(10, 17, 40, 0.45)", backdropFilter: "blur(12px)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className={`trade-right-panel ${showMobileMarkets ? "open" : ""}`} style={{ background: "rgba(10, 17, 40, 0.45)", backdropFilter: "blur(12px)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Pair Search Filter */}
           <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-light)", flexShrink: 0 }}>
-            <div style={{ position: "relative", marginBottom: 10 }}>
-              <Search size={14} style={{ position: "absolute", left: 10, top: 11, color: "var(--text-secondary)" }} />
-              <input className="bn-input bn-input-sm" placeholder="Search markets..." value={pairSearch} onChange={e => setPairSearch(e.target.value)} style={{ paddingLeft: 30 }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              {!isDesktop && (
+                <button type="button" onClick={() => setShowMobileMarkets(false)} style={{ background: "none", border: "none", color: "#FFF", fontSize: 18, cursor: "pointer", padding: "4px 8px" }}>✕</button>
+              )}
+              <div style={{ position: "relative", flex: 1 }}>
+                <Search size={14} style={{ position: "absolute", left: 10, top: 11, color: "var(--text-secondary)" }} />
+                <input className="bn-input bn-input-sm" placeholder="Search markets..." value={pairSearch} onChange={e => setPairSearch(e.target.value)} style={{ paddingLeft: 30 }} />
+              </div>
             </div>
             <div style={{ display: "flex", borderBottom: "1px solid var(--border-light)" }}>
               {["ALL", "L1", "DeFi", "Memes"].map(tab => (
@@ -1937,7 +2161,7 @@ export default function TradePage() {
               const avatarColor = `hsl(${Math.abs(hash) % 360}, 65%, 45%)`;
 
               return (
-                <div key={p.symbol} onClick={() => setActivePair(p)} className="pair-row" style={{
+                <div key={p.symbol} onClick={() => { setActivePair(p); setShowMobileMarkets(false); }} className="pair-row" style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 10,
@@ -1952,16 +2176,21 @@ export default function TradePage() {
                     width: 24,
                     height: 24,
                     borderRadius: "50%",
-                    background: avatarColor,
+                    background: baseSymbol === "GOLD" ? "transparent" : avatarColor,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     fontSize: 10,
                     fontWeight: 800,
                     color: "#fff",
-                    boxShadow: "0 0 8px rgba(0,0,0,0.3)"
+                    boxShadow: baseSymbol === "GOLD" ? "none" : "0 0 8px rgba(0,0,0,0.3)",
+                    overflow: "hidden"
                   }}>
-                    {baseSymbol.slice(0, 2)}
+                    {baseSymbol === "GOLD" ? (
+                      <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      baseSymbol.slice(0, 2)
+                    )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1999,7 +2228,7 @@ export default function TradePage() {
             <div style={{ flex: 1, overflowY: "auto" }}>
               {trades.map((t, idx) => (
                 <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", padding: "3px 16px", fontSize: 10 }}>
-                  <span style={{ color: t.side === "BUY" ? "var(--green)" : "var(--red)", fontWeight: 600 }}>{t.price.toFixed(2)}</span>
+                  <span style={{ color: t.side === "BUY" ? "var(--green)" : "var(--red)", fontWeight: 600 }}>{t.price < 0.0001 ? t.price.toFixed(8) : t.price < 1 ? t.price.toFixed(6) : t.price < 10 ? t.price.toFixed(4) : t.price.toFixed(2)}</span>
                   <span style={{ color: "var(--text-primary)", textAlign: "center" }}>{t.size.toFixed(4)}</span>
                   <span style={{ color: "var(--text-muted)", textAlign: "right" }}>{t.time}</span>
                 </div>
@@ -2015,7 +2244,7 @@ export default function TradePage() {
         backdropFilter: "blur(12px)",
         borderTop: "1px solid var(--border)",
         flexShrink: 0,
-        display: "flex",
+        display: isDesktop ? "flex" : (mobileTab === "orders" ? "flex" : "none"),
         flexDirection: "column",
         zIndex: 100
       }}>
@@ -2077,7 +2306,7 @@ export default function TradePage() {
                           <td>{o.pair}</td>
                           <td>{o.type}</td>
                           <td style={{ color: o.side === "Buy" ? "var(--green)" : "var(--red)", fontWeight: 700 }}>{o.side}</td>
-                          <td>${o.price.toLocaleString()}</td>
+                          <td>${o.price < 0.0001 ? o.price.toFixed(8) : o.price < 1 ? o.price.toFixed(6) : o.price < 10 ? o.price.toFixed(4) : o.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           <td>{o.amount}</td>
                           <td>{o.filled}</td>
                           <td>
@@ -2124,7 +2353,7 @@ export default function TradePage() {
                           <td>{o.pair}</td>
                           <td>{o.type}</td>
                           <td style={{ color: o.side === "Buy" ? "var(--green)" : "var(--red)", fontWeight: 700 }}>{o.side}</td>
-                          <td>${o.price.toLocaleString()}</td>
+                          <td>${o.price < 0.0001 ? o.price.toFixed(8) : o.price < 1 ? o.price.toFixed(6) : o.price < 10 ? o.price.toFixed(4) : o.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           <td>{o.amount}</td>
                           <td style={{ color: "var(--green)", fontWeight: 700 }}>{o.status}</td>
                         </tr>

@@ -44,13 +44,28 @@ Get-ChildItem -Path "admin-panel" -Force | Where-Object { $_.Name -ne "node_modu
     Copy-Item -Path $_.FullName -Destination "$TempDir/admin-panel/" -Recurse -Force
 }
 
+# Copy goldchain-cli (excluding node_modules)
+New-Item -ItemType Directory -Path "$TempDir/goldchain-cli" -Force | Out-Null
+Get-ChildItem -Path "goldchain-cli" -Force | Where-Object { $_.Name -ne "node_modules" } | ForEach-Object {
+    Copy-Item -Path $_.FullName -Destination "$TempDir/goldchain-cli/" -Recurse -Force
+}
+
 # Copy goldchain-l1 (excluding target, target_final_all, node_modules)
 New-Item -ItemType Directory -Path "$TempDir/goldchain-l1" -Force | Out-Null
 Get-ChildItem -Path "goldchain-l1" -Force | Where-Object { $_.Name -ne "target" -and $_.Name -ne "target_final_all" -and $_.Name -ne "node_modules" } | ForEach-Object {
     Copy-Item -Path $_.FullName -Destination "$TempDir/goldchain-l1/" -Recurse -Force
 }
+
+# Cleanup heavy or sensitive terraform files before zipping
+$TfDir = "$TempDir/goldchain-l1/devops/terraform"
+if (Test-Path "$TfDir/.terraform") { Remove-Item -Recurse -Force "$TfDir/.terraform" }
+if (Test-Path "$TfDir/terraform.tfstate") { Remove-Item -Force "$TfDir/terraform.tfstate" }
+if (Test-Path "$TfDir/terraform.tfstate.backup") { Remove-Item -Force "$TfDir/terraform.tfstate.backup" }
+if (Test-Path "$TfDir/cloudexchange-key.pem") { Remove-Item -Force "$TfDir/cloudexchange-key.pem" }
+
 Copy-Item -Path ".env" -Destination "$TempDir/.env" -Force
 Copy-Item -Path "package.json" -Destination "$TempDir/package.json" -Force
+
 
 # Create ZIP archive
 $ZipPath = "cloudexchange-deploy.zip"

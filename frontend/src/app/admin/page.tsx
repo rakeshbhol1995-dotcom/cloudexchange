@@ -16,11 +16,16 @@ import {
   ShieldAlert,
   Server,
   UserCheck,
-  FileText
+  FileText,
+  Search,
+  Sliders,
+  ArrowUpRight,
+  ArrowDownRight
 } from "lucide-react";
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
 import Header from "../components/Header";
+import { API_URL } from "../utils/api";
 
 interface KYCRequest {
   id: string;
@@ -74,7 +79,7 @@ interface CustomPair {
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<"kyc" | "pairs" | "listings" | "merchants" | "disputes" | "system">("kyc");
+  const [activeTab, setActiveTab] = useState<"kyc" | "pairs" | "listings" | "merchants" | "disputes" | "system" | "users">("users");
   
   // Custom pair states
   const [newSymbol, setNewSymbol] = useState("");
@@ -94,7 +99,167 @@ export default function AdminPage() {
   // Toast notifications
   const [toast, setToast] = useState("");
 
+  // User accounts management states
+  const [usersList, setUsersList] = useState<any[]>([]);
+  
+  // Search and Advanced Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterKyc, setFilterKyc] = useState("all");
+  const [filterBlock, setFilterBlock] = useState("all");
+  const [filterMerchant, setFilterMerchant] = useState("all");
+  
+  // Expandable User Desk & Balance Ledger States
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [selectedUserBalances, setSelectedUserBalances] = useState<any[]>([]);
+  const [isFetchingBalances, setIsFetchingBalances] = useState(false);
+  const [isManagingBalanceModal, setIsManagingBalanceModal] = useState(false);
+  const [activeLightboxUrl, setActiveLightboxUrl] = useState<string | null>(null);
+  
+  // Balance management inputs
+  const [balanceManageUserId, setBalanceManageUserId] = useState("");
+  const [adjustBalanceSymbol, setAdjustBalanceSymbol] = useState("USDT");
+  const [adjustBalanceAmount, setAdjustBalanceAmount] = useState("");
+  const [adjustBalanceAction, setAdjustBalanceAction] = useState("add"); // "add" or "subtract"
+  const [adjustBalanceReason, setAdjustBalanceReason] = useState("");
+  const [isAdjustingBalance, setIsAdjustingBalance] = useState(false);
+  
+  // Dynamic temporary block reason inputs per user id
+  const [tempBlockReasons, setTempBlockReasons] = useState<Record<string, string>>({});
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch(`${API_URL}/admin/users`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUsersList(data.users);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch users:", err);
+    }
+  };
+
+  const fetchUserBalances = async (userId: string) => {
+    setIsFetchingBalances(true);
+    try {
+      const res = await fetch(`${API_URL}/balances/${userId}`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSelectedUserBalances(data.balances);
+      } else {
+        setSelectedUserBalances([]);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch balances for user:", userId, err);
+      setSelectedUserBalances([]);
+    } finally {
+      setIsFetchingBalances(false);
+    }
+  };
+
+  const handleToggleBlock = async (userId: string, email: string, currentlyBlocked: boolean) => {
+    try {
+      const reason = tempBlockReasons[userId] || "";
+      const res = await fetch(`${API_URL}/admin/users/toggle-block`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, reason })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        triggerToast(`User '${email}' has been successfully ${currentlyBlocked ? "Unblocked" : "Blocked & Suspended"}.`);
+        setTempBlockReasons(prev => ({ ...prev, [userId]: "" }));
+        fetchUsers();
+      } else {
+        alert(data.error || "Failed to toggle block status.");
+      }
+    } catch (err: any) {
+      alert("Network error: " + err.message);
+    }
+  };
+
+  const handleUpdateKyc = async (userId: string, kycStatus: string) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/users/update-kyc`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, kycStatus })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        triggerToast(`KYC Level updated to ${kycStatus} for user.`);
+        fetchUsers();
+      } else {
+        alert(data.error || "Failed to update KYC status.");
+      }
+    } catch (err: any) {
+      alert("Network error: " + err.message);
+    }
+  };
+
+  const handleToggleMerchantStatus = async (userId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/users/toggle-merchant`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        triggerToast(`P2P Merchant badge status updated successfully.`);
+        fetchUsers();
+      } else {
+        alert(data.error || "Failed to toggle merchant status.");
+      }
+    } catch (err: any) {
+      alert("Network error: " + err.message);
+    }
+  };
+
+  const handleAdjustBalanceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!balanceManageUserId || !adjustBalanceAmount) return;
+    setIsAdjustingBalance(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/balances/adjust`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: balanceManageUserId,
+          symbol: adjustBalanceSymbol,
+          amount: adjustBalanceAmount,
+          action: adjustBalanceAction,
+          reason: adjustBalanceReason
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        triggerToast(`Balance adjusted: ${adjustBalanceAction === "add" ? "+" : "-"}${adjustBalanceAmount} ${adjustBalanceSymbol} successfully.`);
+        setIsManagingBalanceModal(false);
+        setAdjustBalanceAmount("");
+        setAdjustBalanceReason("");
+        fetchUserBalances(balanceManageUserId);
+      } else {
+        alert(data.error || "Failed to adjust wallet balance.");
+      }
+    } catch (err: any) {
+      alert("Network error: " + err.message);
+    } finally {
+      setIsAdjustingBalance(false);
+    }
+  };
+
+  const handleExpandUser = (userId: string) => {
+    if (expandedUserId === userId) {
+      setExpandedUserId(null);
+      setSelectedUserBalances([]);
+    } else {
+      setExpandedUserId(userId);
+      fetchUserBalances(userId);
+    }
+  };
+
   useEffect(() => {
+    fetchUsers();
     // 1. Load or initialize KYC requests
     const defaultKyc: KYCRequest[] = [
       { id: "101", email: "bunty_trader@exchange.com", submittedAt: "2026-05-29 09:12", documentType: "PAN Card", documentNumber: "ABCDE1234F", status: "Pending" },
@@ -279,9 +444,10 @@ export default function AdminPage() {
         {/* Sidebar Nav */}
         <aside className="admin-sidebar">
           {[
-            { id: "kyc", label: "User KYC Verification", icon: <Users size={16} /> },
+            { id: "users", label: "User Accounts Control Desk", icon: <Users size={16} /> },
+            { id: "kyc", label: "User KYC Verification", icon: <UserCheck size={16} /> },
             { id: "listings", label: "Paid Listing Applications", icon: <FileText size={16} /> },
-            { id: "merchants", label: "Merchant Approvals", icon: <UserCheck size={16} /> },
+            { id: "merchants", label: "Merchant Approvals", icon: <ShieldCheck size={16} /> },
             { id: "pairs", label: "Manual Custom Pairs", icon: <Coins size={16} /> },
             { id: "disputes", label: "P2P Escrow Disputes", icon: <ShieldAlert size={16} /> },
             { id: "system", label: "System Health & WAL", icon: <Server size={16} /> },
@@ -337,54 +503,439 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* USERS Tab */}
+          {activeTab === "users" && (
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>User Accounts & Compliance Control Desk</h2>
+              <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 24 }}>Manage user status, view compliance states, and block/unblock trading terminals.</p>
+
+              {/* Dynamic Stats Grid */}
+              <div className="grid-responsive-4" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 24 }}>
+                <div style={{ background: "linear-gradient(135deg, rgba(0, 240, 255, 0.08) 0%, rgba(4, 8, 20, 0.5) 100%)", border: "1px solid rgba(0, 240, 255, 0.15)", borderRadius: 12, padding: 20, boxShadow: "0 0 15px rgba(0, 240, 255, 0.02)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, textTransform: "uppercase" }}>Total Registrations</span>
+                    <span style={{ fontSize: 16 }}>👥</span>
+                  </div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: "var(--cyan)", marginTop: 8 }}>{usersList.length}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Registered system members</div>
+                </div>
+                
+                <div style={{ background: "linear-gradient(135deg, rgba(76, 175, 80, 0.08) 0%, rgba(4, 8, 20, 0.5) 100%)", border: "1px solid rgba(76, 175, 80, 0.15)", borderRadius: 12, padding: 20, boxShadow: "0 0 15px rgba(76, 175, 80, 0.02)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, textTransform: "uppercase" }}>Verified KYC Accounts</span>
+                    <span style={{ fontSize: 16 }}>🛡️</span>
+                  </div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: "var(--green)", marginTop: 8 }}>
+                    {usersList.filter(u => (u.kycStatus || "").includes("Verified") || (u.kycStatus || "").includes("Tier-2") || (u.kycStatus || "").includes("Tier-3")).length}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Tier-2 & Tier-3 active clearance</div>
+                </div>
+                
+                <div style={{ background: "linear-gradient(135deg, rgba(255, 23, 68, 0.08) 0%, rgba(4, 8, 20, 0.5) 100%)", border: "1px solid rgba(255, 23, 68, 0.15)", borderRadius: 12, padding: 20, boxShadow: "0 0 15px rgba(255, 23, 68, 0.02)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, textTransform: "uppercase" }}>Suspended Users</span>
+                    <span style={{ fontSize: 16 }}>🚫</span>
+                  </div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: "var(--red)", marginTop: 8 }}>{usersList.filter(u => u.isBlocked).length}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Terminals locked by compliance</div>
+                </div>
+                
+                <div style={{ background: "linear-gradient(135deg, rgba(245, 166, 35, 0.08) 0%, rgba(4, 8, 20, 0.5) 100%)", border: "1px solid rgba(245, 166, 35, 0.15)", borderRadius: 12, padding: 20, boxShadow: "0 0 15px rgba(245, 166, 35, 0.02)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, textTransform: "uppercase" }}>Active P2P Merchants</span>
+                    <span style={{ fontSize: 16 }}>💼</span>
+                  </div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: "var(--yellow)", marginTop: 8 }}>{usersList.filter(u => u.isMerchant).length}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Collateral verified liquidators</div>
+                </div>
+              </div>
+
+              {/* Filters Panel */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 24, background: "rgba(13, 27, 56, 0.25)", padding: 16, borderRadius: 12, border: "1px solid var(--border)", alignItems: "center" }}>
+                <div style={{ flex: 1, minWidth: 200, position: "relative" }}>
+                  <Search size={16} color="var(--text-secondary)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+                  <input 
+                    type="text" 
+                    placeholder="Search by username, email, phone or ID..." 
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px 10px 36px", background: "rgba(4, 8, 20, 0.5)", border: "1px solid var(--border)", borderRadius: 8, color: "#fff", fontSize: 13 }}
+                  />
+                </div>
+                
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <select 
+                    value={filterKyc} 
+                    onChange={e => setFilterKyc(e.target.value)}
+                    style={{ padding: "10px 12px", background: "rgba(4, 8, 20, 0.5)", border: "1px solid var(--border)", borderRadius: 8, color: "#fff", fontSize: 13 }}
+                  >
+                    <option value="all">All KYC Tiers</option>
+                    <option value="Tier-1">Tier-1 Basic</option>
+                    <option value="Tier-2">Tier-2 Verified</option>
+                    <option value="Tier-3">Tier-3 Premium</option>
+                  </select>
+                  
+                  <select 
+                    value={filterBlock} 
+                    onChange={e => setFilterBlock(e.target.value)}
+                    style={{ padding: "10px 12px", background: "rgba(4, 8, 20, 0.5)", border: "1px solid var(--border)", borderRadius: 8, color: "#fff", fontSize: 13 }}
+                  >
+                    <option value="all">All Account Statuses</option>
+                    <option value="active">Active only</option>
+                    <option value="suspended">Blocked only</option>
+                  </select>
+                  
+                  <select 
+                    value={filterMerchant} 
+                    onChange={e => setFilterMerchant(e.target.value)}
+                    style={{ padding: "10px 12px", background: "rgba(4, 8, 20, 0.5)", border: "1px solid var(--border)", borderRadius: 8, color: "#fff", fontSize: 13 }}
+                  >
+                    <option value="all">All Badges</option>
+                    <option value="merchant">P2P Merchants</option>
+                    <option value="regular">Regular Users</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Users List Container */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {usersList.length === 0 ? (
+                  <div style={{ background: "rgba(10, 17, 40, 0.45)", borderRadius: 12, padding: 48, textAlign: "center", border: "1px solid var(--border)" }}>
+                    <Users size={48} color="var(--cyan)" style={{ margin: "0 auto 16px" }} />
+                    <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>No registered users found in the ecosystem database.</p>
+                  </div>
+                ) : (
+                  usersList
+                    .filter(user => {
+                      const q = searchQuery.toLowerCase();
+                      const matchesSearch = !searchQuery || 
+                        (user.email || "").toLowerCase().includes(q) || 
+                        (user.id || "").toLowerCase().includes(q);
+                      let matchesKyc = true;
+                      if (filterKyc !== "all") {
+                        matchesKyc = (user.kycStatus || "").includes(filterKyc);
+                      }
+                      let matchesBlock = true;
+                      if (filterBlock === "active") {
+                        matchesBlock = !user.isBlocked;
+                      } else if (filterBlock === "suspended") {
+                        matchesBlock = user.isBlocked;
+                      }
+                      let matchesMerchant = true;
+                      if (filterMerchant === "merchant") {
+                        matchesMerchant = user.isMerchant;
+                      } else if (filterMerchant === "regular") {
+                        matchesMerchant = !user.isMerchant;
+                      }
+                      return matchesSearch && matchesKyc && matchesBlock && matchesMerchant;
+                    })
+                    .map((user) => (
+                      <div key={user.id} style={{
+                        background: user.isBlocked ? "rgba(255, 23, 68, 0.04)" : "rgba(13, 27, 56, 0.45)",
+                        border: user.isBlocked ? "1.5px solid rgba(255, 23, 68, 0.25)" : "1.5px solid var(--border)",
+                        borderRadius: 12,
+                        padding: 24,
+                        display: "flex",
+                        flexDirection: "column",
+                        transition: "all 0.3s ease"
+                      }}>
+                        {/* Upper flex row */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
+                          <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+                            <div style={{ 
+                              width: 48, 
+                              height: 48, 
+                              borderRadius: "50%", 
+                              background: user.isBlocked ? "radial-gradient(circle, rgba(255,23,68,0.15) 0%, rgba(4,8,20,0.5) 100%)" : "radial-gradient(circle, var(--cyan-dim) 0%, rgba(4,8,20,0.5) 100%)", 
+                              border: user.isBlocked ? "1.5px solid var(--red)" : "1.5px solid var(--cyan)", 
+                              display: "flex", 
+                              alignItems: "center", 
+                              justifyContent: "center", 
+                              fontSize: 18 
+                            }}>
+                              👤
+                            </div>
+                            <div style={{ textAlign: "left" }}>
+                              <div style={{ fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                <span>{user.email}</span>
+                                {user.isBlocked && (
+                                  <span style={{ fontSize: 9, background: "rgba(255, 23, 68, 0.15)", border: "1px solid rgba(255, 23, 68, 0.3)", color: "var(--red)", padding: "2px 6px", borderRadius: 4, fontWeight: 800 }}>SUSPENDED</span>
+                                )}
+                                {user.isMerchant && (
+                                  <span style={{ fontSize: 9, background: "rgba(245, 166, 35, 0.15)", border: "1px solid rgba(245, 166, 35, 0.3)", color: "var(--yellow)", padding: "2px 6px", borderRadius: 4, fontWeight: 800 }}>P2P MERCHANT</span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+                                Compliance Tier: <span style={{ color: "var(--cyan)", fontWeight: 600 }}>{user.kycStatus || "Tier-1 Basic"}</span> &bull; ID: <span style={{ fontFamily: "monospace" }}>{user.id}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                            <button 
+                              onClick={() => handleExpandUser(user.id)}
+                              className="btn-outline"
+                              style={{ 
+                                padding: "8px 16px",
+                                fontSize: 12,
+                                fontWeight: 700,
+                                borderColor: expandedUserId === user.id ? "var(--yellow)" : "rgba(255,255,255,0.15)",
+                                color: expandedUserId === user.id ? "var(--yellow)" : "var(--text-secondary)"
+                              }}
+                            >
+                              {expandedUserId === user.id ? "▲ Close Details" : "▼ Manage & Balances"}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Collapsible details panel */}
+                        {expandedUserId === user.id && (
+                          <div style={{
+                            marginTop: 20,
+                            paddingTop: 20,
+                            borderTop: "1px solid var(--border)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 20
+                          }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
+                              {/* 1. Wallet Ledger Section */}
+                              <div style={{ background: "rgba(4, 8, 20, 0.4)", borderRadius: 8, padding: 16, border: "1px solid var(--border)" }}>
+                                <h4 style={{ fontSize: 13, fontWeight: 700, color: "var(--cyan)", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                                  🪙 Wallet Ledger balances
+                                </h4>
+                                {isFetchingBalances ? (
+                                  <div style={{ fontSize: 12, color: "var(--text-secondary)", padding: 8 }}>Loading balances...</div>
+                                ) : selectedUserBalances.length === 0 ? (
+                                  <div style={{ fontSize: 12, color: "var(--text-muted)", padding: 8 }}>No wallet balances found.</div>
+                                ) : (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                    {selectedUserBalances.map((bal, idx) => (
+                                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.02)", padding: "6px 10px", borderRadius: 6 }}>
+                                        <span style={{ fontSize: 12, fontWeight: 600 }}>{bal.symbol}</span>
+                                        <div style={{ textAlign: "right" }}>
+                                          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>{parseFloat(bal.amount).toFixed(6)}</div>
+                                          {parseFloat(bal.in_order) > 0 && (
+                                            <div style={{ fontSize: 10, color: "var(--text-muted)" }}>In Order: {parseFloat(bal.in_order).toFixed(6)}</div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                
+                                <div style={{ marginTop: 12 }}>
+                                  <button 
+                                    onClick={() => {
+                                      setBalanceManageUserId(user.id);
+                                      setIsManagingBalanceModal(true);
+                                    }}
+                                    className="btn-outline" 
+                                    style={{ width: "100%", padding: "8px 12px", fontSize: 11, fontWeight: 700, borderColor: "rgba(0, 240, 255, 0.3)", color: "var(--cyan)" }}
+                                  >
+                                    ⚖️ Adjust Ledger Balance
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* 2. Compliance and Access Control Section */}
+                              <div style={{ background: "rgba(4, 8, 20, 0.4)", borderRadius: 8, padding: 16, border: "1px solid var(--border)" }}>
+                                <h4 style={{ fontSize: 13, fontWeight: 700, color: "var(--yellow)", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                                  🛡️ Compliance & KYC Settings
+                                </h4>
+                                
+                                <div style={{ marginBottom: 16 }}>
+                                  <label style={{ display: "block", fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
+                                    Set KYC Verification Tier
+                                  </label>
+                                  <select
+                                    value={user.kycStatus || "Tier-1 Basic (Email Verified)"}
+                                    onChange={(e) => handleUpdateKyc(user.id, e.target.value)}
+                                    style={{ width: "100%", padding: "8px 10px", background: "rgba(4, 8, 20, 0.6)", border: "1px solid var(--border)", borderRadius: 6, color: "#fff", fontSize: 12 }}
+                                  >
+                                    <option value="Tier-1 Basic (Email Verified)">Tier-1 Basic (Email Verified)</option>
+                                    <option value="Tier-2 Verified (Identity Approved)">Tier-2 Verified (Identity Approved)</option>
+                                    <option value="Tier-3 Premium VIP">Tier-3 Premium VIP</option>
+                                  </select>
+                                </div>
+
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.02)", padding: "10px 12px", borderRadius: 6 }}>
+                                  <div>
+                                    <div style={{ fontSize: 12, fontWeight: 700 }}>P2P Merchant Status</div>
+                                    <div style={{ fontSize: 10, color: "var(--text-muted)" }}>Toggle P2P merchant authorized badge</div>
+                                  </div>
+                                  <button
+                                    onClick={() => handleToggleMerchantStatus(user.id)}
+                                    className="btn-outline"
+                                    style={{
+                                      padding: "6px 12px",
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      color: user.isMerchant ? "var(--yellow)" : "var(--text-secondary)",
+                                      borderColor: user.isMerchant ? "rgba(245, 166, 35, 0.4)" : "rgba(255,255,255,0.15)",
+                                      background: user.isMerchant ? "rgba(245, 166, 35, 0.05)" : "transparent"
+                                    }}
+                                  >
+                                    {user.isMerchant ? "✔️ Merchant Active" : "❌ Regular User"}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 3. Block and Suspension terminal */}
+                            <div style={{ 
+                              background: user.isBlocked ? "rgba(255, 23, 68, 0.03)" : "rgba(255, 255, 255, 0.01)", 
+                              border: user.isBlocked ? "1px solid rgba(255, 23, 68, 0.2)" : "1px dashed var(--border)", 
+                              borderRadius: 8, 
+                              padding: 16 
+                            }}>
+                              <h4 style={{ fontSize: 13, fontWeight: 700, color: "var(--red)", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                                🚫 Account Suspension Console
+                              </h4>
+                              
+                              {user.isBlocked && user.blockReason && (
+                                <div style={{ background: "rgba(255, 23, 68, 0.1)", border: "1px solid rgba(255, 23, 68, 0.2)", borderRadius: 6, padding: "10px 12px", marginBottom: 16, fontSize: 12 }}>
+                                  <span style={{ fontWeight: 700, color: "var(--red)" }}>Reason for Suspension: </span>
+                                  <span style={{ color: "#fff" }}>{user.blockReason}</span>
+                                </div>
+                              )}
+                              
+                              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                                <div style={{ flex: 1, minWidth: 240 }}>
+                                  <label style={{ display: "block", fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
+                                    Suspension Reason (Required to block user)
+                                  </label>
+                                  <input 
+                                    type="text"
+                                    placeholder={user.isBlocked ? "e.g. Account reinstated after compliance audit" : "e.g. Unverified identity / Suspicious withdrawals / Dispute fraud"}
+                                    value={tempBlockReasons[user.id] || ""}
+                                    onChange={(e) => setTempBlockReasons(prev => ({ ...prev, [user.id]: e.target.value }))}
+                                    style={{ width: "100%", padding: "8px 12px", background: "rgba(4, 8, 20, 0.6)", border: "1px solid var(--border)", borderRadius: 6, color: "#fff", fontSize: 12 }}
+                                  />
+                                </div>
+                                <button 
+                                  onClick={() => handleToggleBlock(user.id, user.email, user.isBlocked)} 
+                                  className={user.isBlocked ? "btn-yellow" : "btn-outline"}
+                                  disabled={!user.isBlocked && !(tempBlockReasons[user.id] || "").trim()}
+                                  style={{ 
+                                    padding: "8px 20px", 
+                                    fontSize: 12, 
+                                    fontWeight: 800,
+                                    cursor: "pointer",
+                                    color: user.isBlocked ? "#000" : "var(--red)",
+                                    borderColor: user.isBlocked ? "transparent" : "rgba(255, 23, 68, 0.3)",
+                                    opacity: (!user.isBlocked && !(tempBlockReasons[user.id] || "").trim()) ? 0.5 : 1
+                                  }}
+                                >
+                                  {user.isBlocked ? "✔️ Enable / Unblock Account" : "🚫 Block & Suspend Account"}
+                                </button>
+                              </div>
+                              {!user.isBlocked && !(tempBlockReasons[user.id] || "").trim() && (
+                                <span style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 6, display: "block" }}>
+                                  * Please enter a suspension reason above to enable the Block button.
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+          )}
+
           {/* KYC Tab */}
           {activeTab === "kyc" && (
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Identity & Liveness Verification</h2>
-              <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 24 }}>Review and action user tier level-up requests.</p>
+              <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 24 }}>Review and verify submitted regulatory document credentials in real-time.</p>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {kycRequests.length === 0 ? (
+                {usersList.filter(u => u.kycStatus === "Pending Verification").length === 0 ? (
                   <div style={{ background: "rgba(10, 17, 40, 0.45)", borderRadius: 12, padding: 48, textAlign: "center", border: "1px solid var(--border)" }}>
                     <ShieldCheck size={48} color="var(--green)" style={{ margin: "0 auto 16px" }} />
-                    <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>All KYC verification requests have been cleared!</p>
+                    <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>All KYC verification requests have been cleared from the database!</p>
                   </div>
                 ) : (
-                  kycRequests.map((req) => (
-                    <div key={req.id} className="admin-card-flex" style={{
-                      background: "rgba(13, 27, 56, 0.45)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 12,
-                      padding: 24
-                    }}>
-                      <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-                        <div style={{ width: 56, height: 56, borderRadius: "50%", background: "radial-gradient(circle, var(--cyan-dim) 0%, rgba(4,8,20,0.5) 100%)", border: "1.5px solid var(--cyan)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
-                          👤
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 15, fontWeight: 700 }}>{req.email}</div>
-                          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
-                            Requested: {req.submittedAt} &bull; Document: <span style={{ color: "var(--cyan)" }}>{req.documentType} ({req.documentNumber})</span>
+                  usersList
+                    .filter(u => u.kycStatus === "Pending Verification")
+                    .map((user) => (
+                      <div key={user.id} className="admin-card-flex" style={{
+                        background: "rgba(13, 27, 56, 0.45)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 12,
+                        padding: 24,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 20
+                      }}>
+                        <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
+                          {/* Photo preview block */}
+                          {user.kycDocumentUrl ? (
+                            <div 
+                              onClick={() => setActiveLightboxUrl(user.kycDocumentUrl)}
+                              style={{ 
+                                width: 90, 
+                                height: 60, 
+                                borderRadius: 6, 
+                                border: "1.5px solid var(--cyan)", 
+                                overflow: "hidden", 
+                                cursor: "pointer", 
+                                background: "rgba(0,0,0,0.3)",
+                                position: "relative",
+                                boxShadow: "0 0 10px rgba(0, 240, 255, 0.1)"
+                              }}
+                              title="Click to zoom scan"
+                            >
+                              <img 
+                                src={user.kycDocumentUrl.startsWith("/") ? `${API_URL.replace("/api", "")}${user.kycDocumentUrl}` : user.kycDocumentUrl}
+                                alt="Doc scan" 
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                onError={(e) => {
+                                  e.currentTarget.src = "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=200&auto=format&fit=crop";
+                                }}
+                              />
+                              <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0, transition: "opacity 0.2s" }} className="zoom-hover">
+                                🔍
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ width: 90, height: 60, borderRadius: 6, background: "rgba(0,0,0,0.3)", border: "1px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+                              👤
+                            </div>
+                          )}
+                          
+                          <div>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{user.email}</div>
+                            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+                              Region: <span style={{ color: "var(--cyan)" }}>{user.kycCountry || "India"}</span> &bull; Type: <span style={{ color: "var(--cyan)" }}>{user.kycDocType || "Aadhaar Card"}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+                              ID Serial: <span style={{ fontFamily: "monospace", color: "var(--yellow)" }}>{user.kycDocNumber || "N/A"}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {req.status === "Pending" ? (
                         <div style={{ display: "flex", gap: 8 }}>
-                          <button onClick={() => handleKycResolve(req.id, false)} className="btn-outline" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--red)", borderColor: "rgba(239, 68, 68, 0.3)", padding: "8px 16px" }}>
-                            <X size={14} /> Reject
+                          <button 
+                            onClick={() => handleUpdateKyc(user.id, "Tier-1 Basic (Email Verified)")} 
+                            className="btn-outline" 
+                            style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--red)", borderColor: "rgba(239, 68, 68, 0.3)", padding: "8px 16px" }}
+                          >
+                            <X size={14} /> Reject ID
                           </button>
-                          <button onClick={() => handleKycResolve(req.id, true)} className="btn-yellow" style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px" }}>
-                            <Check size={14} /> Approve Verified Status
+                          <button 
+                            onClick={() => handleUpdateKyc(user.id, "Tier-2 Verified (Identity Approved)")} 
+                            className="btn-yellow" 
+                            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px" }}
+                          >
+                            <Check size={14} /> Approve Verified
                           </button>
                         </div>
-                      ) : (
-                        <span style={{ fontSize: 13, fontWeight: 700, color: req.status === "Approved" ? "var(--green)" : "var(--red)" }}>
-                          {req.status.toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                  ))
+                      </div>
+                    ))
                 )}
               </div>
             </div>
@@ -694,6 +1245,218 @@ export default function AdminPage() {
           )}
         </main>
       </div>
+      {/* Ledger Adjustment Modal */}
+      {isManagingBalanceModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "rgba(4, 8, 20, 0.8)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          padding: 16
+        }}>
+          <div style={{
+            background: "rgba(13, 27, 56, 0.95)",
+            border: "1px solid var(--border)",
+            borderRadius: 16,
+            width: "100%",
+            maxWidth: 460,
+            padding: 28,
+            boxShadow: "0 0 40px rgba(0, 240, 255, 0.15)",
+            position: "relative"
+          }}>
+            <button 
+              onClick={() => setIsManagingBalanceModal(false)}
+              style={{ position: "absolute", right: 20, top: 20, background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}
+            >
+              <X size={20} />
+            </button>
+            
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: "var(--cyan)", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+              ⚖️ Adjust Wallet Balance Ledger
+            </h3>
+            <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 20 }}>
+              Deduct or credit assets for compliance operations. This creates an auditable system transaction.
+            </p>
+            
+            <form onSubmit={handleAdjustBalanceSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, marginBottom: 6 }}>
+                  SELECT ASSET
+                </label>
+                <select 
+                  value={adjustBalanceSymbol}
+                  onChange={e => setAdjustBalanceSymbol(e.target.value)}
+                  style={{ width: "100%", padding: "10px 12px", background: "rgba(4, 8, 20, 0.6)", border: "1px solid var(--border)", borderRadius: 8, color: "#fff", fontSize: 13 }}
+                >
+                  <option value="USDT">USDT</option>
+                  <option value="BTC">BTC</option>
+                  <option value="ETH">ETH</option>
+                  <option value="SOL">SOL</option>
+                  <option value="BNB">BNB</option>
+                  <option value="GOLD">GOLD</option>
+                </select>
+              </div>
+              
+              <div>
+                <label style={{ display: "block", fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, marginBottom: 6 }}>
+                  ADJUSTMENT ACTION
+                </label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <button 
+                    type="button"
+                    onClick={() => setAdjustBalanceAction("add")}
+                    style={{
+                      padding: "10px",
+                      borderRadius: 8,
+                      border: "1px solid",
+                      borderColor: adjustBalanceAction === "add" ? "var(--green)" : "var(--border)",
+                      background: adjustBalanceAction === "add" ? "rgba(76, 175, 80, 0.1)" : "transparent",
+                      color: adjustBalanceAction === "add" ? "var(--green)" : "var(--text-secondary)",
+                      fontWeight: 700,
+                      fontSize: 12,
+                      cursor: "pointer"
+                    }}
+                  >
+                    🟢 Credit / Add Balance
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setAdjustBalanceAction("subtract")}
+                    style={{
+                      padding: "10px",
+                      borderRadius: 8,
+                      border: "1px solid",
+                      borderColor: adjustBalanceAction === "subtract" ? "var(--red)" : "var(--border)",
+                      background: adjustBalanceAction === "subtract" ? "rgba(255, 23, 68, 0.1)" : "transparent",
+                      color: adjustBalanceAction === "subtract" ? "var(--red)" : "var(--text-secondary)",
+                      fontWeight: 700,
+                      fontSize: 12,
+                      cursor: "pointer"
+                    }}
+                  >
+                    🔴 Debit / Deduct Balance
+                  </button>
+                </div>
+              </div>
+              
+              <div>
+                <label style={{ display: "block", fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, marginBottom: 6 }}>
+                  AMOUNT
+                </label>
+                <input 
+                  type="number"
+                  step="any"
+                  placeholder="0.00"
+                  required
+                  value={adjustBalanceAmount}
+                  onChange={e => setAdjustBalanceAmount(e.target.value)}
+                  style={{ width: "100%", padding: "10px 12px", background: "rgba(4, 8, 20, 0.6)", border: "1px solid var(--border)", borderRadius: 8, color: "#fff", fontSize: 13 }}
+                />
+              </div>
+              
+              <div>
+                <label style={{ display: "block", fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, marginBottom: 6 }}>
+                  AUDIT LOG REASON (REQUIRED)
+                </label>
+                <input 
+                  type="text"
+                  placeholder="e.g. KYC Promotional Bonus / Dispute Settlement"
+                  required
+                  value={adjustBalanceReason}
+                  onChange={e => setAdjustBalanceReason(e.target.value)}
+                  style={{ width: "100%", padding: "10px 12px", background: "rgba(4, 8, 20, 0.6)", border: "1px solid var(--border)", borderRadius: 8, color: "#fff", fontSize: 13 }}
+                />
+              </div>
+              
+              <button 
+                type="submit" 
+                disabled={isAdjustingBalance}
+                className="btn-yellow" 
+                style={{ width: "100%", padding: "12px", fontSize: 13, fontWeight: 800, marginTop: 8 }}
+              >
+                {isAdjustingBalance ? "Processing Adjustment..." : "✔️ Confirm Ledger Adjustment"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Document Lightbox Preview Modal */}
+      {activeLightboxUrl && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "rgba(4, 8, 20, 0.9)",
+          backdropFilter: "blur(10px)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 10000,
+          padding: 24
+        }}>
+          {/* Close button */}
+          <button 
+            onClick={() => setActiveLightboxUrl(null)}
+            style={{ 
+              position: "absolute", 
+              right: 24, 
+              top: 24, 
+              background: "rgba(255,255,255,0.05)", 
+              border: "1px solid rgba(255,255,255,0.1)", 
+              color: "#FFF", 
+              borderRadius: "50%", 
+              width: 44, 
+              height: 44, 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center", 
+              cursor: "pointer",
+              fontSize: 20
+            }}
+          >
+            ✕
+          </button>
+          
+          {/* Glowing document wrapper */}
+          <div style={{ 
+            background: "rgba(13, 27, 56, 0.6)",
+            border: "2px solid var(--cyan)",
+            borderRadius: 16,
+            padding: 12,
+            boxShadow: "0 0 50px rgba(0, 240, 255, 0.3)",
+            maxWidth: "90%",
+            maxHeight: "80%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden"
+          }}>
+            <img 
+              src={activeLightboxUrl.startsWith("/") ? `${API_URL.replace("/api", "")}${activeLightboxUrl}` : activeLightboxUrl}
+              alt="Verification Document Front" 
+              style={{ maxWidth: "100%", maxHeight: "70vh", objectFit: "contain", borderRadius: 8 }}
+              onError={(e) => {
+                e.currentTarget.src = "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=600&auto=format&fit=crop";
+              }}
+            />
+          </div>
+          
+          <div style={{ marginTop: 20, textAlign: "center" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--cyan)", letterSpacing: 1 }}>🔒 COMPLIANCE REGULATORY ID REVIEW</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>Verify the full name and document identification sequence match exactly.</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

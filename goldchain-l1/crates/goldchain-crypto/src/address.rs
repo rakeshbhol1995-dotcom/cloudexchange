@@ -41,7 +41,7 @@ impl Address {
         let bytes = Vec::<u8>::from_base32(&base32_data)
             .map_err(|_| CryptoError::Bech32DecodingError)?;
 
-        if bytes.len() != 32 {
+        if bytes.is_empty() {
             return Err(CryptoError::InvalidKeyLength {
                 expected: 32,
                 got: bytes.len(),
@@ -62,9 +62,27 @@ impl Address {
         PublicKey::from_bytes(&bytes)
     }
 
+    /// Decodes the address back to its raw bytes representation
+    pub fn to_raw_bytes(&self) -> Result<Vec<u8>, CryptoError> {
+        let (_hrp, base32_data, _variant) = bech32::decode(&self.0)
+            .map_err(|_| CryptoError::Bech32DecodingError)?;
+
+        Vec::<u8>::from_base32(&base32_data)
+            .map_err(|_| CryptoError::Bech32DecodingError)
+    }
+
     /// Returns the address as a string slice
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Creates a Bech32 contract address from WASM bytecode by hashing it with BLAKE3
+    pub fn from_bytecode(bytecode: &[u8]) -> Self {
+        let hash = crate::hash::Hash::digest(bytecode);
+        let base32_data = hash.0.to_base32();
+        let address_str = bech32::encode(HRP, base32_data, Variant::Bech32)
+            .expect("Bech32 encoding should not fail with static hrp and data");
+        Address(address_str)
     }
 }
 

@@ -5,9 +5,10 @@ import { LogOut, ShieldCheck, MessageSquare, Upload, Check, AlertCircle, Termina
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
 import Header from "../components/Header";
+import Footer from "../components/Footer";
 import { API_URL } from "../utils/api";
 
-interface Ad { id: string; seller: string; orders: number; completion: number; rate: number; available: number; minLimit: number; maxLimit: number; payments: string[]; isOffline?: boolean; }
+interface Ad { id: string; seller: string; orders: number; completion: number; rate: number; available: number; minLimit: number; maxLimit: number; payments: string[]; isOffline?: boolean; side?: "BUY" | "SELL"; }
 interface ChatMessage { sender: "system" | "buyer" | "seller"; text: string; time: string; }
 
 const BUY_ADS: Ad[] = [
@@ -107,6 +108,22 @@ export default function P2PMarketplace() {
   const [merchantFormType, setMerchantFormType] = useState<"buy" | "sell">("sell");
 
   // Auth & state sync
+  const fetchP2PAds = async () => {
+    try {
+      const res = await fetch(`${API_URL}/p2p/ads`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.ads) {
+          const allAds: Ad[] = data.ads;
+          setAdsList(allAds.filter(ad => ad.side === "SELL"));
+          setSellAdsList(allAds.filter(ad => ad.side === "BUY"));
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch P2P ads:", err);
+    }
+  };
+
   useEffect(() => {
     const logged = localStorage.getItem("user_logged_in");
     const storedEmail = localStorage.getItem("username");
@@ -115,44 +132,23 @@ export default function P2PMarketplace() {
       setUserEmail(storedEmail || "institutional_trader@cloud.ex");
     }
 
-    // Load P2P ads
-    const savedAds = localStorage.getItem("p2p_active_ads");
-    if (savedAds) {
-      setAdsList(JSON.parse(savedAds));
-    } else {
-      localStorage.setItem("p2p_active_ads", JSON.stringify(BUY_ADS));
-    }
-
-    const savedSellAds = localStorage.getItem("p2p_active_sell_ads");
-    if (savedSellAds) {
-      setSellAdsList(JSON.parse(savedSellAds));
-    } else {
-      localStorage.setItem("p2p_active_sell_ads", JSON.stringify(SELL_ADS));
-    }
+    fetchP2PAds();
 
     // Check merchant status
     const isApproved = localStorage.getItem("is_p2p_merchant") === "true";
     setIsMerchantApproved(isApproved);
-
-    const savedApps = localStorage.getItem("admin_merchant_applications");
-    if (savedApps && (storedEmail || logged === "true")) {
-      const targetUser = storedEmail || "institutional_trader@cloud.ex";
-      const apps = JSON.parse(savedApps);
-      const userApp = apps.find((a: any) => a.username === targetUser);
-      if (userApp) {
-        if (userApp.status === "Pending") {
-          setIsMerchantPending(true);
-        } else if (userApp.status === "Approved") {
-          setIsMerchantApproved(true);
-          setIsMerchantPending(false);
-        }
-      }
+    
+    const storedUpi = localStorage.getItem("merchant_upi_id");
+    if (storedUpi) {
+      setMerchantUpi(storedUpi);
     }
   }, [showMerchantModal, showPostAdModal]);
 
   const handleLogout = () => {
     localStorage.removeItem("user_logged_in");
     localStorage.removeItem("username");
+    localStorage.removeItem("is_p2p_merchant");
+    localStorage.removeItem("merchant_upi_id");
     setIsLoggedIn(false);
     setUserEmail("");
   };
@@ -166,121 +162,147 @@ export default function P2PMarketplace() {
       alert("Welcome to the Merchant Dashboard! You are authorized to place high-volume payment ads.");
       return;
     }
-    if (isMerchantPending) {
-      alert("Your merchant application is currently under review by the exchange risk team. Check back soon.");
-      return;
-    }
     setShowMerchantModal(true);
   };
 
-  const handleRegisterMerchant = (e: React.FormEvent) => {
+  const handleRegisterMerchant = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!merchantUpi) {
       alert("Please specify a valid UPI ID.");
       return;
     }
-    const targetUser = userEmail || "institutional_trader@cloud.ex";
-    const newApp = {
-      id: "M-" + Math.floor(1000 + Math.random() * 9000),
-      username: targetUser,
-      upiId: merchantUpi,
-      depositAmount: 500,
-      status: "Pending"
-    };
+    const targetUser = localStorage.getItem("user_id") || userEmail;
 
-    const savedApps = localStorage.getItem("admin_merchant_applications");
-    const appsList = savedApps ? JSON.parse(savedApps) : [];
-    localStorage.setItem("admin_merchant_applications", JSON.stringify([...appsList, newApp]));
+    try {
+      const res = await fetch(`${API_URL}/p2p/merchant/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: targetUser,
+          upiId: merchantUpi
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIsMerchantApproved(true);
+        localStorage.setItem("is_p2p_merchant", "true");
+        localStorage.setItem("merchant_upi_id", merchantUpi);
+        
+        const b = parseFloat(localStorage.getItem("wallet_balance") || "15740.50");
+        localStorage.setItem("wallet_balance", String(Math.max(0, +(b - 500).toFixed(2))));
+        window.dispatchEvent(new Event("storage"));
 
-    setIsMerchantPending(true);
-    setShowMerchantModal(false);
-    alert("Application submitted! 500 USDT has been mock locked from your collateral. Admin will verify UPI details.");
+        setShowMerchantModal(false);
+        alert(data.message || "Merchant status approved! 500 USDT collateral locked.");
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to register merchant.");
+      }
+    } catch (err: any) {
+      alert(`Connection error applying as merchant: ${err.message}`);
+    }
   };
 
-  const handlePostAdSubmit = (e: React.FormEvent) => {
+  const handlePostAdSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetUser = userEmail || "institutional_trader@cloud.ex";
-    const newAd: Ad = {
-      id: "ad-" + Math.floor(10000 + Math.random() * 90000),
-      seller: targetUser.split("@")[0],
-      orders: 12,
-      completion: 100.0,
-      rate: parseFloat(newAdRate) || 89.50,
-      available: parseFloat(newAdAvailable) || 1000,
-      minLimit: parseFloat(newAdMinLimit) || 5000,
-      maxLimit: parseFloat(newAdMaxLimit) || 50000,
-      payments: [newAdPayment]
-    };
+    const adSide = tradeType === "buy" ? "SELL" : "BUY";
 
-    if (tradeType === "buy") {
-      const updatedAds = [newAd, ...adsList];
-      setAdsList(updatedAds);
-      localStorage.setItem("p2p_active_ads", JSON.stringify(updatedAds));
-    } else {
-      const updatedAds = [newAd, ...sellAdsList];
-      setSellAdsList(updatedAds);
-      localStorage.setItem("p2p_active_sell_ads", JSON.stringify(updatedAds));
-    }
-    setShowPostAdModal(false);
-    alert(`Successfully posted new P2P Trade Ad with rate: ${newAd.rate} INR!`);
-  };
-
-  const toggleAdStatus = (adId: string, isUserBuyTab: boolean) => {
-    if (isUserBuyTab) {
-      const updated = adsList.map(ad => ad.id === adId ? { ...ad, isOffline: !ad.isOffline } : ad);
-      setAdsList(updated);
-      localStorage.setItem("p2p_active_ads", JSON.stringify(updated));
-    } else {
-      const updated = sellAdsList.map(ad => ad.id === adId ? { ...ad, isOffline: !ad.isOffline } : ad);
-      setSellAdsList(updated);
-      localStorage.setItem("p2p_active_sell_ads", JSON.stringify(updated));
+    try {
+      const res = await fetch(`${API_URL}/p2p/post-ad`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          seller: targetUser.split("@")[0],
+          side: adSide,
+          rate: newAdRate,
+          available: newAdAvailable,
+          minLimit: newAdMinLimit,
+          maxLimit: newAdMaxLimit,
+          payments: [newAdPayment]
+        })
+      });
+      if (res.ok) {
+        await fetchP2PAds();
+        setShowPostAdModal(false);
+        alert(`Successfully posted new P2P Trade Ad!`);
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to post ad.");
+      }
+    } catch (err: any) {
+      alert(`Connection error posting ad: ${err.message}`);
     }
   };
 
-  const deleteMerchantAd = (adId: string, isUserBuyTab: boolean) => {
+  const toggleAdStatus = async (adId: string, isUserBuyTab: boolean) => {
+    try {
+      const res = await fetch(`${API_URL}/p2p/ads/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adId })
+      });
+      if (res.ok) {
+        await fetchP2PAds();
+      } else {
+        alert("Failed to toggle advertisement status.");
+      }
+    } catch (err: any) {
+      console.warn("Error toggling ad status:", err.message);
+    }
+  };
+
+  const deleteMerchantAd = async (adId: string, isUserBuyTab: boolean) => {
     if (!confirm("Are you sure you want to permanently delete this trade advertisement?")) return;
-    if (isUserBuyTab) {
-      const updated = adsList.filter(ad => ad.id !== adId);
-      setAdsList(updated);
-      localStorage.setItem("p2p_active_ads", JSON.stringify(updated));
-    } else {
-      const updated = sellAdsList.filter(ad => ad.id !== adId);
-      setSellAdsList(updated);
-      localStorage.setItem("p2p_active_sell_ads", JSON.stringify(updated));
+    try {
+      const res = await fetch(`${API_URL}/p2p/ads/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adId })
+      });
+      if (res.ok) {
+        await fetchP2PAds();
+      } else {
+        alert("Failed to delete advertisement.");
+      }
+    } catch (err: any) {
+      console.warn("Error deleting ad:", err.message);
     }
   };
 
-  const handleMerchantPostAdSubmit = (e: React.FormEvent) => {
+  const handleMerchantPostAdSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetUser = userEmail || "institutional_trader@cloud.ex";
-    const newAd: Ad = {
-      id: "ad-" + Math.floor(10000 + Math.random() * 90000),
-      seller: targetUser.split("@")[0],
-      orders: 0,
-      completion: 100.0,
-      rate: parseFloat(newAdRate) || 89.50,
-      available: parseFloat(newAdAvailable) || 1000,
-      minLimit: parseFloat(newAdMinLimit) || 5000,
-      maxLimit: parseFloat(newAdMaxLimit) || 50000,
-      payments: [newAdPayment],
-      isOffline: false
-    };
+    const adSide = merchantFormType === "sell" ? "SELL" : "BUY";
 
-    if (merchantFormType === "sell") {
-      const updatedAds = [newAd, ...adsList];
-      setAdsList(updatedAds);
-      localStorage.setItem("p2p_active_ads", JSON.stringify(updatedAds));
-    } else {
-      const updatedAds = [newAd, ...sellAdsList];
-      setSellAdsList(updatedAds);
-      localStorage.setItem("p2p_active_sell_ads", JSON.stringify(updatedAds));
+    try {
+      const res = await fetch(`${API_URL}/p2p/post-ad`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          seller: targetUser.split("@")[0],
+          side: adSide,
+          rate: newAdRate,
+          available: newAdAvailable,
+          minLimit: newAdMinLimit,
+          maxLimit: newAdMaxLimit,
+          payments: [newAdPayment]
+        })
+      });
+      if (res.ok) {
+        await fetchP2PAds();
+        setNewAdRate("89.50");
+        setNewAdAvailable("1000");
+        setNewAdMinLimit("5000");
+        setNewAdMaxLimit("50000");
+        alert(`Successfully posted new P2P Trade Ad!`);
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to post ad.");
+      }
+    } catch (err: any) {
+      alert(`Connection error posting ad: ${err.message}`);
     }
-
-    setNewAdRate("89.50");
-    setNewAdAvailable("1000");
-    setNewAdMinLimit("5000");
-    setNewAdMaxLimit("50000");
-    alert(`Successfully posted new P2P Trade Ad with rate: ${newAd.rate} INR!`);
   };
 
   const handleOpenPurchase = (ad: Ad) => {
@@ -1569,23 +1591,7 @@ export default function P2PMarketplace() {
       )}
 
       {/* FOOTER */}
-      <footer style={{
-        background: "rgba(10, 17, 40, 0.75)",
-        backdropFilter: "blur(12px)",
-        borderTop: "1px solid var(--border)",
-        padding: "32px 0",
-        fontSize: 12,
-        color: "var(--text-secondary)",
-        marginTop: "auto"
-      }}>
-        <div className="container-xl" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span>© 2026 CloudExchange P2P Marketplace. Escrow protocol audits publicly verifiable.</span>
-          <div style={{ display: "flex", gap: 16 }}>
-            <Link href="/" style={{ color: "var(--text-secondary)", textDecoration: "none" }}>Back to Home</Link>
-            <a href="#" style={{ color: "var(--text-secondary)", textDecoration: "none" }}>Risk Disclaimer</a>
-          </div>
-        </div>
-      </footer>
+      <Footer />
 
     </div>
   );

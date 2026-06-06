@@ -1,6 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
-use redb::{Database, TableDefinition};
+use redb::{Database, TableDefinition, ReadableTable};
 use borsh::BorshDeserialize;
 use goldchain_crypto::hash::Hash;
 use goldchain_crypto::address::Address;
@@ -14,6 +14,7 @@ pub const TABLE_TXS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("txs")
 pub const TABLE_RECEIPTS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("receipts");
 pub const TABLE_IDX_ADDRESS_TXS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("idx_address_txs");
 pub const TABLE_IDX_EVENT_TOPIC: TableDefinition<&[u8], &[u8]> = TableDefinition::new("idx_event_topic");
+pub const TABLE_SMT: TableDefinition<&[u8], &[u8]> = TableDefinition::new("smt");
 
 #[derive(Clone)]
 pub struct Storage {
@@ -35,6 +36,7 @@ impl Storage {
             let _ = write_txn.open_table(TABLE_RECEIPTS).map_err(|e| StorageError::DbError(e.to_string()))?;
             let _ = write_txn.open_table(TABLE_IDX_ADDRESS_TXS).map_err(|e| StorageError::DbError(e.to_string()))?;
             let _ = write_txn.open_table(TABLE_IDX_EVENT_TOPIC).map_err(|e| StorageError::DbError(e.to_string()))?;
+            let _ = write_txn.open_table(TABLE_SMT).map_err(|e| StorageError::DbError(e.to_string()))?;
         }
         write_txn.commit().map_err(|e| StorageError::DbError(e.to_string()))?;
 
@@ -66,18 +68,65 @@ impl Storage {
                 txs_table.insert(tx_hash.as_ref(), tx_bytes.as_slice()).map_err(|e| StorageError::DbError(e.to_string()))?;
 
                 // Index sender
-                let sender_pub = tx.from.to_public_key().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+                let sender_bytes = tx.from.to_raw_bytes().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
                 let mut sender_key = Vec::with_capacity(32 + 32);
-                sender_key.extend_from_slice(&sender_pub.to_bytes());
+                sender_key.extend_from_slice(&sender_bytes);
                 sender_key.extend_from_slice(tx_hash.as_ref());
                 idx_addr_table.insert(sender_key.as_slice(), &[] as &[u8]).map_err(|e| StorageError::DbError(e.to_string()))?;
 
                 // Index recipient
-                let recipient_pub = tx.to.to_public_key().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+                let recipient_bytes = tx.to.to_raw_bytes().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
                 let mut recipient_key = Vec::with_capacity(32 + 32);
-                recipient_key.extend_from_slice(&recipient_pub.to_bytes());
+                recipient_key.extend_from_slice(&recipient_bytes);
                 recipient_key.extend_from_slice(tx_hash.as_ref());
                 idx_addr_table.insert(recipient_key.as_slice(), &[] as &[u8]).map_err(|e| StorageError::DbError(e.to_string()))?;
+            }
+        }
+        write_txn.commit().map_err(|e| StorageError::DbError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Writes block data, indexes all transactions/events inside it, and writes SMT nodes within a single atomic transaction
+    pub fn put_block_and_smt_nodes(&self, block: &Block, nodes: &std::collections::HashMap<[u8; 32], Vec<u8>>) -> Result<(), StorageError> {
+        let block_bytes = borsh::to_vec(block)?;
+        let block_hash = block.hash();
+
+        let write_txn = self.db.begin_write().map_err(|e| StorageError::DbError(e.to_string()))?;
+        {
+            let mut blocks_table = write_txn.open_table(TABLE_BLOCKS).map_err(|e| StorageError::DbError(e.to_string()))?;
+            blocks_table.insert(block.header.height, block_bytes.as_slice()).map_err(|e| StorageError::DbError(e.to_string()))?;
+
+            let mut hashes_table = write_txn.open_table(TABLE_BLOCK_HASHES).map_err(|e| StorageError::DbError(e.to_string()))?;
+            hashes_table.insert(block_hash.as_ref(), block.header.height).map_err(|e| StorageError::DbError(e.to_string()))?;
+
+            // Put transactions inside this transaction
+            let mut txs_table = write_txn.open_table(TABLE_TXS).map_err(|e| StorageError::DbError(e.to_string()))?;
+            let mut idx_addr_table = write_txn.open_table(TABLE_IDX_ADDRESS_TXS).map_err(|e| StorageError::DbError(e.to_string()))?;
+
+            for tx in &block.transactions {
+                let tx_bytes = borsh::to_vec(tx)?;
+                let tx_hash = tx.hash();
+                txs_table.insert(tx_hash.as_ref(), tx_bytes.as_slice()).map_err(|e| StorageError::DbError(e.to_string()))?;
+
+                // Index sender
+                let sender_bytes = tx.from.to_raw_bytes().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+                let mut sender_key = Vec::with_capacity(32 + 32);
+                sender_key.extend_from_slice(&sender_bytes);
+                sender_key.extend_from_slice(tx_hash.as_ref());
+                idx_addr_table.insert(sender_key.as_slice(), &[] as &[u8]).map_err(|e| StorageError::DbError(e.to_string()))?;
+
+                // Index recipient
+                let recipient_bytes = tx.to.to_raw_bytes().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+                let mut recipient_key = Vec::with_capacity(32 + 32);
+                recipient_key.extend_from_slice(&recipient_bytes);
+                recipient_key.extend_from_slice(tx_hash.as_ref());
+                idx_addr_table.insert(recipient_key.as_slice(), &[] as &[u8]).map_err(|e| StorageError::DbError(e.to_string()))?;
+            }
+
+            let mut smt_table = write_txn.open_table(TABLE_SMT).map_err(|e| StorageError::DbError(e.to_string()))?;
+            for (hash, node_bytes) in nodes {
+                smt_table.insert(hash.as_slice(), node_bytes.as_slice()).map_err(|e| StorageError::DbError(e.to_string()))?;
             }
         }
         write_txn.commit().map_err(|e| StorageError::DbError(e.to_string()))?;
@@ -224,8 +273,7 @@ impl Storage {
         let read_txn = self.db.begin_read().map_err(|e| StorageError::DbError(e.to_string()))?;
         let table = read_txn.open_table(TABLE_IDX_ADDRESS_TXS).map_err(|e| StorageError::DbError(e.to_string()))?;
 
-        let pub_key = address.to_public_key().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        let prefix = pub_key.to_bytes();
+        let prefix = address.to_raw_bytes().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
         let mut tx_hashes = Vec::new();
 
@@ -270,5 +318,72 @@ impl Storage {
         }
 
         Ok(events)
+    }
+
+    // --- SMT Storage Methods ---
+
+    pub fn get_smt_node_raw(&self, hash: &[u8; 32]) -> Result<Option<Vec<u8>>, StorageError> {
+        let read_txn = self.db.begin_read().map_err(|e| StorageError::DbError(e.to_string()))?;
+        let table = read_txn.open_table(TABLE_SMT).map_err(|e| StorageError::DbError(e.to_string()))?;
+        match table.get(hash.as_slice()).map_err(|e| StorageError::DbError(e.to_string()))? {
+            Some(guard) => Ok(Some(guard.value().to_vec())),
+            None => Ok(None),
+        }
+    }
+
+    pub fn put_smt_nodes_raw(&self, nodes: &std::collections::HashMap<[u8; 32], Vec<u8>>) -> Result<(), StorageError> {
+        let write_txn = self.db.begin_write().map_err(|e| StorageError::DbError(e.to_string()))?;
+        {
+            let mut table = write_txn.open_table(TABLE_SMT).map_err(|e| StorageError::DbError(e.to_string()))?;
+            for (hash, node_bytes) in nodes {
+                table.insert(hash.as_slice(), node_bytes.as_slice()).map_err(|e| StorageError::DbError(e.to_string()))?;
+            }
+        }
+        write_txn.commit().map_err(|e| StorageError::DbError(e.to_string()))?;
+        Ok(())
+    }
+
+    // --- Generic Contract State and Economic State Persistence ---
+
+    pub fn put_contract_state_raw(&self, key: &str, value: &[u8]) -> Result<(), StorageError> {
+        let write_txn = self.db.begin_write().map_err(|e| StorageError::DbError(e.to_string()))?;
+        {
+            let mut table = write_txn.open_table(TABLE_STATE).map_err(|e| StorageError::DbError(e.to_string()))?;
+            table.insert(key, value).map_err(|e| StorageError::DbError(e.to_string()))?;
+        }
+        write_txn.commit().map_err(|e| StorageError::DbError(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn get_contract_state_raw(&self, key: &str) -> Result<Option<Vec<u8>>, StorageError> {
+        let read_txn = self.db.begin_read().map_err(|e| StorageError::DbError(e.to_string()))?;
+        let table = read_txn.open_table(TABLE_STATE).map_err(|e| StorageError::DbError(e.to_string()))?;
+        match table.get(key).map_err(|e| StorageError::DbError(e.to_string()))? {
+            Some(guard) => Ok(Some(guard.value().to_vec())),
+            None => Ok(None),
+        }
+    }
+
+    /// Fetches all accounts from state table that have a staked balance > 0
+    pub fn get_staked_accounts(&self) -> Result<Vec<(Address, Account)>, StorageError> {
+        let read_txn = self.db.begin_read().map_err(|e| StorageError::DbError(e.to_string()))?;
+        let table = read_txn.open_table(TABLE_STATE).map_err(|e| StorageError::DbError(e.to_string()))?;
+        let mut staked = Vec::new();
+        
+        let range = table.iter().map_err(|e| StorageError::DbError(e.to_string()))?;
+        for result in range {
+            let (key_guard, value_guard) = result.map_err(|e| StorageError::DbError(e.to_string()))?;
+            let key = key_guard.value();
+            let value = value_guard.value();
+            
+            if key.starts_with("gold") {
+                if let Ok(account) = Account::deserialize(&mut &value[..]) {
+                    if account.staked > 0 {
+                        staked.push((Address(key.to_string()), account));
+                    }
+                }
+            }
+        }
+        Ok(staked)
     }
 }

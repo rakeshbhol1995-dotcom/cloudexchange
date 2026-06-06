@@ -14,22 +14,29 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ Error: docker-compose is not installed on this host server."
-    exit 1
+COMPOSE_CMD="docker compose"
+if ! docker compose version &> /dev/null; then
+    if command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="docker-compose"
+    else
+        echo "❌ Error: Neither docker compose nor docker-compose is installed on this host server."
+        exit 1
+    fi
 fi
+
+echo "ℹ️ Using Compose command: $COMPOSE_CMD"
 
 # 2. Cleanup Legacy Containers
 echo "🧹 Cleaning up legacy container states..."
-docker-compose down || true
+$COMPOSE_CMD down || true
 
 # 3. Compile and Build Containers
 echo "🏗️ Building goldchain-node workspace container images..."
-docker-compose build
+$COMPOSE_CMD build
 
 # 4. Spawning the mesh validators in background daemon mode
 echo "🚀 Spawning a 3-validator BFT network..."
-docker-compose up -d
+$COMPOSE_CMD up -d
 
 # 5. Display Active Live Listening Endpoints
 echo "✅ Testnet node cluster is fully bootstrapped!"
@@ -38,4 +45,4 @@ echo "Validator Node 0 Active RPC: http://localhost:8545"
 echo "Validator Node 1 Active RPC: http://localhost:8546"
 echo "Validator Node 2 Active RPC: http://localhost:8547"
 echo "----------------------------------------------------"
-docker-compose ps
+$COMPOSE_CMD ps

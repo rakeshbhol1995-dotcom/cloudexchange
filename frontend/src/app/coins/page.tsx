@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { QRCodeSVG } from "qrcode.react";
 import { 
   LogOut, 
   ShieldCheck, 
@@ -12,11 +13,13 @@ import {
   TrendingUp,
   Coins,
   CheckCircle2,
-  X
+  X,
+  ArrowLeft
 } from "lucide-react";
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
 import Header from "../components/Header";
+import Footer from "../components/Footer";
 import { API_URL } from "../utils/api";
 
 interface AssetBalance {
@@ -60,7 +63,7 @@ const COIN_DIRECTORY_LIST: CoinDirectoryItem[] = [
   { symbol: "ADA", name: "Cardano", price: 0.46, change24h: -2.30, volume24h: 350, color: "#0033AD" },
   { symbol: "SHIB", name: "Shiba Inu", price: 0.000022, change24h: 8.90, volume24h: 620, color: "#FFA143" },
   { symbol: "DOT", name: "Polkadot", price: 6.75, change24h: -1.15, volume24h: 180, color: "#E6007A" },
-  { symbol: "MATIC", name: "Polygon", price: 0.68, change24h: 1.55, volume24h: 210, color: "#8247E5" },
+  { symbol: "MATIC", name: "Polygon", price: 0.093, change24h: 1.55, volume24h: 210, color: "#8247E5" },
   { symbol: "SUI", name: "Sui Network", price: 1.15, change24h: 12.45, volume24h: 450, color: "#6FB1E4" },
   { symbol: "LINK", name: "Chainlink", price: 16.50, change24h: -0.40, volume24h: 310, color: "#375BD2" },
   { symbol: "LTC", name: "Litecoin", price: 78.40, change24h: 0.25, volume24h: 290, color: "#BFBBBB" },
@@ -82,7 +85,7 @@ const COIN_DIRECTORY_LIST: CoinDirectoryItem[] = [
   { symbol: "ARB", name: "Arbitrum", price: 0.95, change24h: -3.80, volume24h: 220, color: "#28A0F0" },
   { symbol: "IMX", name: "Immutable", price: 1.80, change24h: 1.65, volume24h: 115, color: "#0D0D0D" },
   { symbol: "STX", name: "Stacks", price: 1.95, change24h: -2.25, volume24h: 95, color: "#5546FF" },
-  { symbol: "RNDR", name: "Render Token", price: 7.80, change24h: 8.40, volume24h: 310, color: "#E02020" },
+  { symbol: "RNDR", name: "Render Token", price: 1.896, change24h: 8.40, volume24h: 310, color: "#E02020" },
   { symbol: "GALA", name: "Gala Games", price: 0.041, change24h: -4.10, volume24h: 160, color: "#0A0A0A" },
   { symbol: "FET", name: "Fetch.ai", price: 1.65, change24h: 6.80, volume24h: 290, color: "#00003C" },
   { symbol: "JUP", name: "Jupiter", price: 0.98, change24h: 3.12, volume24h: 185, color: "#1B3B36" },
@@ -165,13 +168,14 @@ export default function CoinsPage() {
   const [liveBlockNumber, setLiveBlockNumber] = useState<number>(0);
   const [liveGoldBalance, setLiveGoldBalance] = useState<number>(0);
   const [isNodeConnected, setIsNodeConnected] = useState<boolean>(false);
+  const [userGoldAddress, setUserGoldAddress] = useState<string>("");
 
-  // Poll live L1 node JSON-RPC daemon
+  // Poll live L1 node JSON-RPC daemon via backend proxy
   useEffect(() => {
     const pollBlockchainNode = async () => {
       try {
-        // 1. Fetch current block number
-        const blockRes = await fetch("http://localhost:8545", {
+        // 1. Fetch current block number via proxy
+        const blockRes = await fetch(`${API_URL}/goldchain-rpc`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -189,30 +193,32 @@ export default function CoinsPage() {
           }
         }
 
-        // 2. Fetch live GOLD balance (Bech32 address)
-        const balRes = await fetch("http://localhost:8545", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            method: "gold_getBalance",
-            params: ["gold1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4rshq"],
-            id: 2
-          })
-        });
-        if (balRes.ok) {
-          const data = await balRes.json();
-          if (data.result !== undefined) {
-            const grmBalance = data.result / 1_000_000_000;
-            setLiveGoldBalance(grmBalance);
-            
-            // Inject live GOLD balance into Next.js portfolio assets
-            setAssets(prev => prev.map(a => {
-              if (a.symbol === "GOLD") {
-                return { ...a, amount: grmBalance };
-              }
-              return a;
-            }));
+        // 2. Fetch live GOLD balance if user address is pre-loaded via proxy
+        if (userGoldAddress) {
+          const balRes = await fetch(`${API_URL}/goldchain-rpc`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "gold_getBalance",
+              params: [userGoldAddress],
+              id: 2
+            })
+          });
+          if (balRes.ok) {
+            const data = await balRes.json();
+            if (data.result !== undefined) {
+              const grmBalance = data.result / 1_000_000_000;
+              setLiveGoldBalance(grmBalance);
+              
+              // Inject live GOLD balance into Next.js portfolio assets
+              setAssets(prev => prev.map(a => {
+                if (a.symbol === "GOLD") {
+                  return { ...a, amount: grmBalance };
+                }
+                return a;
+              }));
+            }
           }
         }
       } catch (err) {
@@ -223,11 +229,11 @@ export default function CoinsPage() {
     pollBlockchainNode();
     const interval = setInterval(pollBlockchainNode, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [userGoldAddress]);
 
   // Market display toggle state
   const [displayCurrency, setDisplayCurrency] = useState<"USDT" | "INR">("USDT");
-  const INR_MULTIPLIER = 88.50;
+  const [inrRate, setInrRate] = useState<number>(84.50);
 
   // Modal states: "deposit" | "withdraw" | "none"
   const [modalType, setModalType] = useState<"deposit" | "withdraw" | "none">("none");
@@ -252,9 +258,9 @@ export default function CoinsPage() {
   // Wallet backend states
   const [txHistory, setTxHistory] = useState<TxHistoryItem[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-  const [simulatedDepositAmount, setSimulatedDepositAmount] = useState("");
   const [isDepositing, setIsDepositing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [userPhone, setUserPhone] = useState("");
 
   // Multi-factor settings from Security portal
   const [selfieAuthActive, setSelfieAuthActive] = useState(true);
@@ -338,6 +344,20 @@ export default function CoinsPage() {
       setUserEmail(storedEmail || "institutional_trader@cloud.ex");
       if (userId) {
         fetchBalancesAndHistory(userId);
+        
+        // Pre-fetch user's real GOLD L1 address for dynamic balance polling
+        fetch(`${API_URL}/wallet/get-real-address`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, symbol: "GOLD", network: "GoldChain L1" })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.address) {
+              setUserGoldAddress(data.address);
+            }
+          })
+          .catch(err => console.warn("Failed to pre-fetch GOLD L1 address:", err));
       }
     } else {
       setUserEmail("institutional_trader@cloud.ex");
@@ -346,36 +366,14 @@ export default function CoinsPage() {
     setKycStatus(status);
 
     // Sync active security settings
+    // Load user phone from localStorage if saved
+    const storedPhone = localStorage.getItem("user_phone");
+    if (storedPhone) setUserPhone(storedPhone);
+
+    // Sync active security settings
     setSelfieAuthActive(localStorage.getItem("selfie_auth_active") !== "false");
     setSmsOtpActive(localStorage.getItem("sms_otp_active") !== "false");
     setEmailOtpActive(localStorage.getItem("email_otp_active") !== "false");
-
-    const defaultBalances: AssetBalance[] = [
-      { symbol: "GOLD", name: "GoldChain Native Coin", amount: 1250.00, inOrder: 0.00, color: "#F5A623" },
-      { symbol: "USDT", name: "Tether USD", amount: 15740.50, inOrder: 0.00, color: "#26A17B" },
-      { symbol: "BTC", name: "Bitcoin", amount: 0.2450, inOrder: 0.00, color: "#F7931A" },
-      { symbol: "ETH", name: "Ethereum", amount: 2.8500, inOrder: 0.00, color: "#627EEA" },
-      { symbol: "SOL", name: "Solana", amount: 15.40, inOrder: 0.00, color: "#14F195" },
-      { symbol: "BNB", name: "BNB Smart Chain", amount: 4.80, inOrder: 0.00, color: "#F3BA2F" }
-    ];
-
-    const storedBalances = localStorage.getItem("user_asset_balances");
-    if (!userId && storedBalances) {
-      const parsed: AssetBalance[] = JSON.parse(storedBalances);
-      const prefunded = parsed.map(a => ({
-        ...a,
-        amount: Math.max(a.amount, 50000.00)
-      }));
-      setAssets(prefunded);
-      localStorage.setItem("user_asset_balances", JSON.stringify(prefunded));
-    } else if (!userId) {
-      const prefundedDefaults = defaultBalances.map(a => ({
-        ...a,
-        amount: 50000.00
-      }));
-      setAssets(prefundedDefaults);
-      localStorage.setItem("user_asset_balances", JSON.stringify(prefundedDefaults));
-    }
 
     // Load custom pairs
     const savedCustomPairs = localStorage.getItem("admin_custom_trading_pairs");
@@ -391,7 +389,7 @@ export default function CoinsPage() {
     }
   }, []);
 
-  // Fetch real-time coin prices from Binance public REST API
+  // Fetch real-time coin prices from Binance public REST API and live USD-INR rate
   useEffect(() => {
     const fetchAllPrices = async () => {
       try {
@@ -402,7 +400,8 @@ export default function CoinsPage() {
         setCoinDirectory(prev => prev.map(c => {
           if (c.symbol === "USDT") return c;
           
-          const apiItem = data.find((item: any) => item.symbol === `${c.symbol}USDT`);
+          const targetSymbol = c.symbol === "MATIC" ? "POLUSDT" : (c.symbol === "RNDR" ? "RENDERUSDT" : `${c.symbol}USDT`);
+          const apiItem = data.find((item: any) => item.symbol === targetSymbol);
           if (apiItem) {
             return {
               ...c,
@@ -418,12 +417,26 @@ export default function CoinsPage() {
         setCoinDirectory(prev => prev.map(c => {
           if (c.symbol === "USDT") return c;
           const delta = (Math.random() - 0.49) * (c.price * 0.001);
+          const decimals = c.price < 0.0001 ? 8 : c.price < 1 ? 6 : c.price < 10 ? 4 : 2;
           return {
             ...c,
-            price: +(c.price + delta).toFixed(c.price < 2 ? 4 : 2),
+            price: +(c.price + delta).toFixed(decimals),
             change24h: +(c.change24h + (Math.random() - 0.5) * 0.1).toFixed(2)
           };
         }));
+      }
+
+      // Fetch live USD to INR exchange rate from a public exchange rate API
+      try {
+        const inrRes = await fetch("https://api.exchangerate-api.com/v4/latest/USD");
+        if (inrRes.ok) {
+          const inrData = await inrRes.json();
+          if (inrData && inrData.rates && inrData.rates.INR) {
+            setInrRate(parseFloat(inrData.rates.INR));
+          }
+        }
+      } catch (inrErr) {
+        console.warn("Could not fetch USD-INR exchange rate: ", inrErr);
       }
     };
 
@@ -442,8 +455,8 @@ export default function CoinsPage() {
 
   // Network list selector map helper
   const getNetworksForCoin = (coin: string): string[] => {
-    if (coin === "GOLD") return ["Polygon Network", "BNB Smart Chain (BEP20)", "TRON (TRC20)", "Solana Network", "Arbitrum One"];
-    if (coin === "USDT") return ["TRON (TRC20)", "Ethereum (ERC20)", "BNB Smart Chain (BEP20)", "Solana Network", "Polygon Network"];
+    if (coin === "GOLD") return ["GoldChain L1", "Polygon Network", "BNB Smart Chain (BEP20)", "TRON (TRC20)", "Solana Network", "Arbitrum One"];
+    if (coin === "USDT") return ["TRON (TRC20)", "Ethereum (ERC20)", "BNB Smart Chain (BEP20)", "Solana Network", "Polygon Network", "Arbitrum One"];
     if (coin === "BTC") return ["Bitcoin Network", "BNB Smart Chain (BEP20)"];
     if (coin === "ETH") return ["Ethereum (ERC20)", "Arbitrum One", "Optimism", "BNB Smart Chain (BEP20)"];
     if (coin === "SOL") return ["Solana Network", "BNB Smart Chain (BEP20)"];
@@ -457,7 +470,13 @@ export default function CoinsPage() {
     if (modalType === "deposit") {
       const fetchRealTatumAddress = async () => {
         setIsGeneratingAddress(true);
-        const userId = localStorage.getItem("user_id") || "usr-fallback";
+        setDepositAddress("");
+        const userId = localStorage.getItem("user_id");
+        if (!userId) {
+          triggerToast("Please log in to generate deposit address.", "error");
+          setIsGeneratingAddress(false);
+          return;
+        }
         try {
           const res = await fetch(`${API_URL}/wallet/get-real-address`, {
             method: "POST",
@@ -468,10 +487,12 @@ export default function CoinsPage() {
           if (res.ok && data.success && data.address) {
             setDepositAddress(data.address);
           } else {
-            setDepositAddress("0x" + Math.random().toString(36).substring(2, 12).toUpperCase());
+            triggerToast(data.error || "Failed to generate unique blockchain address.", "error");
+            setDepositAddress("");
           }
-        } catch (err) {
-          setDepositAddress("0x" + Math.random().toString(36).substring(2, 12).toUpperCase());
+        } catch (err: any) {
+          triggerToast(`Failed to connect to gateway: ${err.message}`, "error");
+          setDepositAddress("");
         } finally {
           setIsGeneratingAddress(false);
         }
@@ -493,6 +514,18 @@ export default function CoinsPage() {
       return () => clearTimeout(timer);
     }
   }, [smsCountdown]);
+
+  // Disable body scroll when modal is open
+  useEffect(() => {
+    if (modalType !== "none" || show2faOverlay) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [modalType, show2faOverlay]);
 
   const handleLogout = () => {
     localStorage.removeItem("user_logged_in");
@@ -548,41 +581,37 @@ export default function CoinsPage() {
         body: JSON.stringify({ email: userEmail })
       });
       if (res.ok) {
-        const data = await res.json();
-        if (data.sandbox && data.code) {
-          triggerToast(`[SANDBOX MOCK] Email OTP Code: ${data.code}`, "success");
-        } else {
-          triggerToast("Verification dispatch success. OTP sent to your secure email.");
-        }
+        triggerToast("Verification OTP sent to your registered email address.");
       } else {
-        triggerToast("Failed to dispatch Email OTP code.", "error");
+        const data = await res.json();
+        triggerToast(data.error || "Failed to dispatch Email OTP code.", "error");
       }
     } catch (err) {
-      triggerToast("Verification dispatch success. OTP sent to your registered secure email.");
+      triggerToast("Failed to send email OTP. Please try again.", "error");
     }
   };
 
   const handleSendSmsCode = async () => {
     if (smsCountdown > 0) return;
     setSmsCountdown(60);
+    if (!userPhone) {
+      triggerToast("No mobile number registered. Please update your profile with a phone number.", "error");
+      return;
+    }
     try {
       const res = await fetch(`${API_URL}/security/send-sms-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: userEmail, phoneNumber: "+919999999999" })
+        body: JSON.stringify({ email: userEmail, phoneNumber: userPhone })
       });
       if (res.ok) {
-        const data = await res.json();
-        if (data.sandbox && data.code) {
-          triggerToast(`[SANDBOX MOCK] SMS OTP Code: ${data.code}`, "success");
-        } else {
-          triggerToast("Verification dispatch success. OTP sent to your mobile phone via SMS.");
-        }
+        triggerToast(`OTP sent to your registered mobile number via SMS.`);
       } else {
-        triggerToast("Failed to dispatch SMS OTP code.", "error");
+        const data = await res.json();
+        triggerToast(data.error || "Failed to dispatch SMS OTP code.", "error");
       }
     } catch (err) {
-      triggerToast("Verification dispatch success. OTP sent to your registered mobile phone via SMS.");
+      triggerToast("Failed to send SMS OTP. Please try again.", "error");
     }
   };
 
@@ -600,58 +629,6 @@ export default function CoinsPage() {
       setSelfieVerified(true);
       triggerToast("Selfie biometric scan verified. Safe Device ID matched.", "success");
     }, 3800);
-  };
-
-  const handleSimulateDeposit = async () => {
-    const amt = parseFloat(simulatedDepositAmount);
-    if (isNaN(amt) || amt <= 0) {
-      triggerToast("Please enter a valid deposit amount.", "error");
-      return;
-    }
-
-    const userId = localStorage.getItem("user_id") || "usr-fallback";
-    setIsDepositing(true);
-
-    try {
-      const res = await fetch(`${API_URL}/wallet/deposit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          symbol: activeModalCoin,
-          amount: amt,
-          address: depositAddress,
-          network: selectedNetwork
-        })
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        triggerToast(`Successfully simulated blockchain deposit of ${amt} ${activeModalCoin}!`, "success");
-        setSimulatedDepositAmount("");
-        
-        // Refresh balances
-        if (userId !== "usr-fallback") {
-          await fetchBalancesAndHistory(userId);
-        } else {
-          // Fallback to updating in-memory UI balances if not logged in
-          const updated = assets.map(a => {
-            if (a.symbol === activeModalCoin) {
-              return { ...a, amount: +(a.amount + amt).toFixed(6) };
-            }
-            return a;
-          });
-          setAssets(updated);
-          localStorage.setItem("user_asset_balances", JSON.stringify(updated));
-        }
-      } else {
-        triggerToast(data.error || "Simulation credit failed.", "error");
-      }
-    } catch (err: any) {
-      triggerToast(`Error simulating deposit: ${err.message}`, "error");
-    } finally {
-      setIsDepositing(false);
-    }
   };
 
   const handleSyncRealDeposits = async () => {
@@ -733,35 +710,14 @@ export default function CoinsPage() {
         return;
       }
 
-      triggerToast(`Withdrawal of ${amt} ${activeModalCoin} completed successfully!`, "success");
+      triggerToast(`Withdrawal of ${amt} ${activeModalCoin} submitted successfully!`, "success");
       setModalType("none");
       setShow2faOverlay(false);
 
       // Refresh balances and transaction logs
-      if (userId !== "usr-fallback") {
-        await fetchBalancesAndHistory(userId);
-      } else {
-        // Fallback for sandbox mode
-        const updated = assets.map(a => {
-          if (a.symbol === activeModalCoin) {
-            return { ...a, amount: +(a.amount - amt).toFixed(6) };
-          }
-          return a;
-        });
-        setAssets(updated);
-        localStorage.setItem("user_asset_balances", JSON.stringify(updated));
-
-        // Simulated local history
-        const newTx: TxHistoryItem = {
-          id: data.txid || "TXW" + Math.floor(10000 + Math.random() * 90000),
-          time: new Date().toLocaleString(),
-          type: "Withdrawal",
-          coin: activeModalCoin,
-          amount: amt,
-          address: withdrawAddress.slice(0, 8) + "..." + withdrawAddress.slice(-6),
-          status: "Completed"
-        };
-        setTxHistory(prev => [newTx, ...prev]);
+      const userId2 = localStorage.getItem("user_id");
+      if (userId2) {
+        await fetchBalancesAndHistory(userId2);
       }
     } catch (err: any) {
       triggerToast(`Network error: ${err.message}`, "error");
@@ -797,35 +753,6 @@ export default function CoinsPage() {
     return `https://etherscan.io/tx/${cleanTx}`; // Fallback
   };
 
-  // Technical QR code block
-  const TechQRCode = ({ text }: { text: string }) => (
-    <div style={{
-      width: 140,
-      height: 140,
-      background: "#fff",
-      padding: 8,
-      borderRadius: 8,
-      display: "grid",
-      gridTemplateColumns: "repeat(6, 1fr)",
-      gridTemplateRows: "repeat(6, 1fr)",
-      gap: 3,
-      boxShadow: "0 0 15px rgba(255,255,255,0.15)",
-      position: "relative"
-    }}>
-      <div style={{ background: "#040814", gridColumn: "1/3", gridRow: "1/3", borderRadius: 2 }} />
-      <div style={{ background: "#040814", gridColumn: "5/7", gridRow: "1/3", borderRadius: 2 }} />
-      <div style={{ background: "#040814", gridColumn: "1/3", gridRow: "5/7", borderRadius: 2 }} />
-      <div style={{ background: "var(--yellow)", gridColumn: "3/5", gridRow: "3/5", borderRadius: "50%", margin: 2 }} />
-      <div style={{ background: "#040814", gridColumn: "3", gridRow: "1" }} />
-      <div style={{ background: "#040814", gridColumn: "4", gridRow: "2" }} />
-      <div style={{ background: "#040814", gridColumn: "5", gridRow: "3" }} />
-      <div style={{ background: "#040814", gridColumn: "3", gridRow: "5" }} />
-      <div style={{ background: "#040814", gridColumn: "4", gridRow: "6" }} />
-      <div style={{ background: "#040814", gridColumn: "6", gridRow: "4" }} />
-      <div style={{ background: "#040814", gridColumn: "1", gridRow: "4" }} />
-      <div style={{ background: "#040814", gridColumn: "5", gridRow: "5" }} />
-    </div>
-  );
 
   return (
     <div style={{ minHeight: "100vh", position: "relative", color: "var(--text-primary)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -996,8 +923,8 @@ export default function CoinsPage() {
               <tbody>
                 {filteredCoins.map(coin => {
                   const isUp = coin.change24h >= 0;
-                  const finalPrice = displayCurrency === "USDT" ? coin.price : coin.price * INR_MULTIPLIER;
-                  const finalVol = displayCurrency === "USDT" ? coin.volume24h : coin.volume24h * INR_MULTIPLIER;
+                  const finalPrice = displayCurrency === "USDT" ? coin.price : coin.price * inrRate;
+                  const finalVol = displayCurrency === "USDT" ? coin.volume24h : coin.volume24h * inrRate;
                   
                   return (
                     <tr key={coin.symbol} style={{ borderBottom: "1px solid var(--border-light)", transition: "background 0.15s" }} className="pair-row">
@@ -1007,16 +934,21 @@ export default function CoinsPage() {
                             width: 28,
                             height: 28,
                             borderRadius: "50%",
-                            background: coin.color,
+                            background: coin.symbol === "GOLD" ? "transparent" : coin.color,
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             fontWeight: 800,
                             fontSize: 11,
                             color: "#fff",
-                            boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
+                            boxShadow: coin.symbol === "GOLD" ? "none" : "0 2px 8px rgba(0,0,0,0.3)",
+                            overflow: "hidden"
                           }}>
-                            {coin.symbol.slice(0, 2)}
+                            {coin.symbol === "GOLD" ? (
+                              <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ) : (
+                              coin.symbol.slice(0, 2)
+                            )}
                           </div>
                           <div>
                             <strong style={{ color: "var(--text-primary)", fontSize: 14 }}>{coin.symbol}</strong>
@@ -1026,7 +958,7 @@ export default function CoinsPage() {
                       </td>
                       <td style={{ padding: "14px 16px" }}>
                         <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>
-                          {displayCurrency === "USDT" ? "$" : "₹"}{finalPrice < 1 ? finalPrice.toFixed(6) : finalPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          {displayCurrency === "USDT" ? "$" : "₹"}{finalPrice < 0.0001 ? finalPrice.toFixed(8) : finalPrice < 1 ? finalPrice.toFixed(6) : finalPrice < 10 ? finalPrice.toFixed(4) : finalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </td>
                       <td className="hide-mobile" style={{ padding: "14px 16px" }}>
@@ -1154,10 +1086,11 @@ export default function CoinsPage() {
           background: "rgba(2, 4, 10, 0.85)",
           backdropFilter: "blur(8px)",
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "center",
           zIndex: 1000,
-          padding: 20
+          padding: "40px 20px",
+          overflowY: "auto"
         }}>
           <div style={{
             background: "rgba(10, 17, 40, 0.95)",
@@ -1167,20 +1100,101 @@ export default function CoinsPage() {
             maxWidth: 460,
             padding: 24,
             position: "relative",
-            boxShadow: "0 10px 40px rgba(0,0,0,0.8)"
+            boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
+            margin: "auto"
           }}>
-            <button onClick={() => setModalType("none")} style={{ position: "absolute", right: 20, top: 20, background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}>
-              <X size={18} />
+            {/* Top-Right Close Button for Mobile Accessibility */}
+            <button 
+              onClick={() => setModalType("none")}
+              aria-label="Close modal"
+              style={{
+                position: "absolute",
+                top: 20,
+                right: 20,
+                background: "rgba(255, 255, 255, 0.04)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "50%",
+                width: 32,
+                height: 32,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--text-secondary)",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                outline: "none",
+                zIndex: 10
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+                e.currentTarget.style.borderColor = "var(--red)";
+                e.currentTarget.style.color = "var(--red)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                e.currentTarget.style.color = "var(--text-secondary)";
+              }}
+            >
+              <X size={16} />
             </button>
-            <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Deposit Crypto Assets</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+              <button 
+                onClick={() => setModalType("none")} 
+                style={{ 
+                  display: "inline-flex", 
+                  alignItems: "center", 
+                  gap: 6, 
+                  background: "rgba(255, 255, 255, 0.04)", 
+                  border: "1px solid rgba(255, 255, 255, 0.08)", 
+                  borderRadius: "100px", 
+                  padding: "6px 14px", 
+                  color: "var(--text-secondary)", 
+                  fontSize: "12px", 
+                  fontWeight: 600, 
+                  cursor: "pointer", 
+                  outline: "none",
+                  transition: "all 0.2s"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+                  e.currentTarget.style.borderColor = "var(--yellow)";
+                  e.currentTarget.style.color = "var(--yellow)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                  e.currentTarget.style.color = "var(--text-secondary)";
+                }}
+              >
+                <ArrowLeft size={14} /> Back
+              </button>
+              <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Deposit Crypto Assets</h3>
+            </div>
             <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 20 }}>Send virtual digital assets directly to your institutional ledger account.</p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div>
                 <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>SELECTED ASSET</label>
                 <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: coinDirectory.find(c => c.symbol === activeModalCoin)?.color || "var(--yellow)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#fff", fontWeight: 800 }}>
-                    {activeModalCoin.slice(0, 2)}
+                  <div style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: "50%",
+                    background: activeModalCoin === "GOLD" ? "transparent" : (coinDirectory.find(c => c.symbol === activeModalCoin)?.color || "var(--yellow)"),
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 9,
+                    color: "#fff",
+                    fontWeight: 800,
+                    overflow: "hidden"
+                  }}>
+                    {activeModalCoin === "GOLD" ? (
+                      <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      activeModalCoin.slice(0, 2)
+                    )}
                   </div>
                   <strong style={{ fontSize: 14 }}>{activeModalCoin}</strong>
                 </div>
@@ -1221,7 +1235,15 @@ export default function CoinsPage() {
                   </div>
                 ) : (
                   <>
-                    <TechQRCode text={depositAddress} />
+                    <div style={{ background: "#fff", padding: 10, borderRadius: 10, boxShadow: "0 0 20px rgba(255,255,255,0.1)" }}>
+                      <QRCodeSVG
+                        value={depositAddress || "cloudexchange.in"}
+                        size={140}
+                        bgColor="#ffffff"
+                        fgColor="#000000"
+                        level="H"
+                      />
+                    </div>
                     <div style={{ width: "100%", marginTop: 20 }}>
                       <label style={{ fontSize: 9, color: "var(--text-muted)", fontWeight: 700, display: "block", marginBottom: 4, textAlign: "center" }}>YOUR UNIQUE {activeModalCoin} ADDRESS</label>
                       <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 6, padding: 8, alignItems: "center", justifyContent: "space-between" }}>
@@ -1236,31 +1258,11 @@ export default function CoinsPage() {
                 )}
               </div>
 
-              {/* Simulated Live Blockchain Deposit Form */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
-                <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block" }}>SIMULATE REAL BLOCKCHAIN DEPOSIT</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="Enter amount to credit"
-                    className="bn-input"
-                    value={simulatedDepositAmount}
-                    onChange={e => setSimulatedDepositAmount(e.target.value)}
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSimulateDeposit}
-                    disabled={isDepositing}
-                    className="btn-yellow"
-                    style={{ padding: "0 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
-                  >
-                    {isDepositing ? "Processing..." : "Simulate Deposit"}
-                  </button>
-                </div>
-              </div>
 
+              {/* Info: Real blockchain deposit instructions */}
+              <div style={{ background: "rgba(0, 240, 255, 0.06)", border: "1px solid rgba(0, 240, 255, 0.2)", borderRadius: 8, padding: 12, fontSize: 11, color: "var(--cyan)" }}>
+                ✅ Send real {activeModalCoin} on {selectedNetwork} to the address above. Your balance will update automatically after blockchain confirmation.
+              </div>
               {/* Sync Live Blockchain Deposits Button */}
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
                 <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block" }}>LIVE BLOCKCHAIN SYSTEM</label>
@@ -1304,10 +1306,11 @@ export default function CoinsPage() {
           background: "rgba(2, 4, 10, 0.85)",
           backdropFilter: "blur(8px)",
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "center",
           zIndex: 1000,
-          padding: 20
+          padding: "40px 20px",
+          overflowY: "auto"
         }}>
           <div style={{
             background: "rgba(10, 17, 40, 0.95)",
@@ -1317,20 +1320,102 @@ export default function CoinsPage() {
             maxWidth: 460,
             padding: 24,
             position: "relative",
-            boxShadow: "0 10px 40px rgba(0,0,0,0.8)"
+            boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
+            margin: "auto"
           }}>
-            <button onClick={() => setModalType("none")} style={{ position: "absolute", right: 20, top: 20, background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}>
-              <X size={18} />
+            {/* Top-Right Close Button for Mobile Accessibility */}
+            <button 
+              onClick={() => setModalType("none")}
+              aria-label="Close modal"
+              style={{
+                position: "absolute",
+                top: 20,
+                right: 20,
+                background: "rgba(255, 255, 255, 0.04)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "50%",
+                width: 32,
+                height: 32,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--text-secondary)",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                outline: "none",
+                zIndex: 10
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+                e.currentTarget.style.borderColor = "var(--red)";
+                e.currentTarget.style.color = "var(--red)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                e.currentTarget.style.color = "var(--text-secondary)";
+              }}
+            >
+              <X size={16} />
             </button>
-            <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Withdraw Crypto Assets</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+              <button 
+                type="button"
+                onClick={() => setModalType("none")} 
+                style={{ 
+                  display: "inline-flex", 
+                  alignItems: "center", 
+                  gap: 6, 
+                  background: "rgba(255, 255, 255, 0.04)", 
+                  border: "1px solid rgba(255, 255, 255, 0.08)", 
+                  borderRadius: "100px", 
+                  padding: "6px 14px", 
+                  color: "var(--text-secondary)", 
+                  fontSize: "12px", 
+                  fontWeight: 600, 
+                  cursor: "pointer", 
+                  outline: "none",
+                  transition: "all 0.2s"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+                  e.currentTarget.style.borderColor = "var(--yellow)";
+                  e.currentTarget.style.color = "var(--yellow)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                  e.currentTarget.style.color = "var(--text-secondary)";
+                }}
+              >
+                <ArrowLeft size={14} /> Back
+              </button>
+              <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Withdraw Crypto Assets</h3>
+            </div>
             <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 20 }}>Dispatch locked tokens from your ledger directly to an external cold storage wallet.</p>
 
             <form onSubmit={(e) => { e.preventDefault(); setShow2faOverlay(true); }} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div>
                 <label style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 6 }}>SELECTED ASSET</label>
                 <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: coinDirectory.find(c => c.symbol === activeModalCoin)?.color || "var(--yellow)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#fff", fontWeight: 800 }}>
-                    {activeModalCoin.slice(0, 2)}
+                  <div style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: "50%",
+                    background: activeModalCoin === "GOLD" ? "transparent" : (coinDirectory.find(c => c.symbol === activeModalCoin)?.color || "var(--yellow)"),
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 9,
+                    color: "#fff",
+                    fontWeight: 800,
+                    overflow: "hidden"
+                  }}>
+                    {activeModalCoin === "GOLD" ? (
+                      <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      activeModalCoin.slice(0, 2)
+                    )}
                   </div>
                   <strong style={{ fontSize: 14 }}>{activeModalCoin}</strong>
                 </div>
@@ -1380,10 +1465,11 @@ export default function CoinsPage() {
           background: "rgba(2, 4, 10, 0.95)",
           backdropFilter: "blur(12px)",
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "center",
           zIndex: 1100,
-          padding: 20
+          padding: "40px 20px",
+          overflowY: "auto"
         }}>
           <div style={{
             background: "rgba(10, 17, 40, 0.95)",
@@ -1392,21 +1478,77 @@ export default function CoinsPage() {
             width: "100%",
             maxWidth: 420,
             padding: 24,
-            position: "relative"
+            position: "relative",
+            margin: "auto"
           }}>
-            <button onClick={() => setShow2faOverlay(false)} style={{ position: "absolute", right: 20, top: 20, background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}>
-              <X size={18} />
+            {/* Top-Right Close Button for Mobile Accessibility */}
+            <button 
+              onClick={() => setShow2faOverlay(false)}
+              aria-label="Close modal"
+              style={{
+                position: "absolute",
+                top: 20,
+                right: 20,
+                background: "rgba(255, 255, 255, 0.04)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "50%",
+                width: 32,
+                height: 32,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--text-secondary)",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                outline: "none",
+                zIndex: 10
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+                e.currentTarget.style.borderColor = "var(--red)";
+                e.currentTarget.style.color = "var(--red)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                e.currentTarget.style.color = "var(--text-secondary)";
+              }}
+            >
+              <X size={16} />
             </button>
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, borderBottom: "1px solid var(--border-light)", paddingBottom: 10 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 800 }}>Multi-Factor Authorization</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, borderBottom: "1px solid var(--border-light)", paddingBottom: 10 }}>
               <button 
                 type="button"
-                onClick={() => setIsNewDevice(!isNewDevice)}
-                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 6px", color: "var(--cyan)", fontSize: 9, fontWeight: 700, cursor: "pointer" }}
+                onClick={() => setShow2faOverlay(false)} 
+                style={{ 
+                  display: "inline-flex", 
+                  alignItems: "center", 
+                  gap: 6, 
+                  background: "rgba(255, 255, 255, 0.04)", 
+                  border: "1px solid rgba(255, 255, 255, 0.08)", 
+                  borderRadius: "100px", 
+                  padding: "6px 14px", 
+                  color: "var(--text-secondary)", 
+                  fontSize: "12px", 
+                  fontWeight: 600, 
+                  cursor: "pointer", 
+                  outline: "none",
+                  transition: "all 0.2s"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+                  e.currentTarget.style.borderColor = "var(--yellow)";
+                  e.currentTarget.style.color = "var(--yellow)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                  e.currentTarget.style.color = "var(--text-secondary)";
+                }}
               >
-                [Simulate: {isNewDevice ? "IP Mismatch" : "Saved Device"}]
+                <ArrowLeft size={14} /> Back
               </button>
+              <h3 style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>Multi-Factor Authorization</h3>
             </div>
             
             <p style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 16 }}>Confirm withdrawal dispatch of {withdrawAmount} {activeModalCoin}.</p>
@@ -1477,6 +1619,9 @@ export default function CoinsPage() {
           </div>
         </div>
       )}
+
+      {/* FOOTER */}
+      <Footer />
     </div>
   );
 }

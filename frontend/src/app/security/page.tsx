@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Key, ShieldCheck, Mail, Search, HelpCircle, Lock, Smartphone, ShieldAlert, Cpu, CheckCircle } from "lucide-react";
+import { Key, ShieldCheck, Mail, Search, HelpCircle, Lock, Smartphone, ShieldAlert, Cpu, CheckCircle, Copy, Check, ExternalLink, X, Info } from "lucide-react";
 import Header from "../components/Header";
 import SpaceBackground from "../components/SpaceBackground";
 
@@ -44,6 +44,48 @@ export default function SecurityPage() {
   // Hardware key simulated prompt
   const [showWebAuthnPrompt, setShowWebAuthnPrompt] = useState(false);
   const [webauthnState, setWebauthnState] = useState<"insert" | "touch" | "success">("insert");
+
+  // Google 2FA Setup States
+  const [showGoogle2faSetup, setShowGoogle2faSetup] = useState(false);
+  const [showGoogle2faDisable, setShowGoogle2faDisable] = useState(false);
+  const [totpSecret] = useState("CE2F AK7Y BB3S 5983");
+  const [totpInputCode, setTotpInputCode] = useState("");
+  const [totpError, setTotpError] = useState("");
+  const [totpCopyFeedback, setTotpCopyFeedback] = useState(false);
+
+  const handleCopySecret = () => {
+    navigator.clipboard.writeText(totpSecret.replace(/\s/g, ""));
+    setTotpCopyFeedback(true);
+    setTimeout(() => setTotpCopyFeedback(false), 2000);
+  };
+
+  const handleVerifyAndEnableTOTP = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(totpInputCode)) {
+      setTotpError("Verification code must be exactly 6 digits.");
+      return;
+    }
+    setGoogle2faActive(true);
+    localStorage.setItem("2fa_totp_active", "true");
+    setShowGoogle2faSetup(false);
+    setTotpInputCode("");
+    setTotpError("");
+    triggerAlert("Google Authenticator 2FA successfully activated.");
+  };
+
+  const handleVerifyAndDisableTOTP = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(totpInputCode)) {
+      setTotpError("Verification code must be exactly 6 digits.");
+      return;
+    }
+    setGoogle2faActive(false);
+    localStorage.setItem("2fa_totp_active", "false");
+    setShowGoogle2faDisable(false);
+    setTotpInputCode("");
+    setTotpError("");
+    triggerAlert("Google Authenticator 2FA successfully deactivated.");
+  };
 
   useEffect(() => {
     const code = localStorage.getItem("anti_phishing_code");
@@ -222,10 +264,13 @@ export default function SecurityPage() {
                   </div>
                   <button
                     onClick={() => {
-                      const next = !google2faActive;
-                      setGoogle2faActive(next);
-                      localStorage.setItem("2fa_totp_active", String(next));
-                      triggerAlert(next ? "Google Authenticator 2FA active." : "Google Authenticator 2FA deactivated.");
+                      setTotpInputCode("");
+                      setTotpError("");
+                      if (google2faActive) {
+                        setShowGoogle2faDisable(true);
+                      } else {
+                        setShowGoogle2faSetup(true);
+                      }
                     }}
                     className={google2faActive ? "btn-outline" : "btn-green bn-tab-sm"}
                     style={{ height: 32, padding: "0 14px", borderRadius: 6, fontSize: 12 }}
@@ -604,10 +649,429 @@ export default function SecurityPage() {
         </div>
       )}
 
+      {/* Google Authenticator Setup Modal */}
+      {showGoogle2faSetup && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(3, 7, 18, 0.9)",
+          backdropFilter: "blur(8px)",
+          zIndex: 9999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+          overflowY: "auto"
+        }}>
+          <div style={{
+            background: "#060913",
+            border: "1px solid var(--border)",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.8)",
+            borderRadius: 20,
+            maxWidth: 820,
+            width: "100%",
+            padding: 32,
+            position: "relative",
+            display: "flex",
+            flexDirection: "column",
+            gap: 24
+          }}>
+            {/* Close button */}
+            <button
+              onClick={() => setShowGoogle2faSetup(false)}
+              style={{
+                position: "absolute",
+                top: 20,
+                right: 20,
+                background: "rgba(255, 255, 255, 0.05)",
+                border: "none",
+                borderRadius: "50%",
+                width: 32,
+                height: 32,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--text-secondary)",
+                cursor: "pointer",
+                transition: "background 0.2s"
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255, 255, 255, 0.15)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)"}
+            >
+              <X size={18} />
+            </button>
+
+            {/* Header */}
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                <span style={{
+                  background: "rgba(252, 213, 53, 0.1)",
+                  color: "var(--yellow)",
+                  padding: "4px 12px",
+                  borderRadius: 20,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: 1
+                }}>
+                  MFA Activation
+                </span>
+              </div>
+              <h2 style={{ fontSize: 24, fontWeight: 800, color: "#fff", letterSpacing: -0.5 }}>
+                Google Authenticator Setup (TOTP 2FA)
+              </h2>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 4 }}>
+                Protect your withdrawals, trades, and security settings with a hardware-locked dynamic code.
+              </p>
+            </div>
+
+            {/* Two Column Layout */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1.1fr",
+              gap: 32
+            }} className="grid-responsive-2fa">
+              
+              {/* Left Column: Interactive QR Code & Setup Key */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                {/* Step 1: Simulated QR code */}
+                <div style={{
+                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid var(--border-light)",
+                  borderRadius: 14,
+                  padding: 20,
+                  textAlign: "center",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  position: "relative"
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--yellow)", marginBottom: 12 }}>
+                    STEP 1: SCAN QR CODE
+                  </div>
+                  
+                  {/* Glowing QR Container */}
+                  <div style={{
+                    width: 140,
+                    height: 140,
+                    background: "#fff",
+                    borderRadius: 12,
+                    padding: 8,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 0 20px rgba(0, 240, 255, 0.15)",
+                    border: "2px solid var(--cyan)",
+                    position: "relative"
+                  }}>
+                    {/* Simulated SVG QR code to make it look premium */}
+                    <svg width="100%" height="100%" viewBox="0 0 100 100" style={{ shapeRendering: "crispEdges" }}>
+                      <rect width="100" height="100" fill="#ffffff" />
+                      {/* Quiet Zone Grid */}
+                      <path d="M5,5 h15 v15 h-15 z M10,10 h5 v5 h-5 z" fill="#000" />
+                      <path d="M75,5 h15 v15 h-15 z M80,10 h5 v5 h-5 z" fill="#000" />
+                      <path d="M5,75 h15 v15 h-15 z M10,80 h5 v5 h-5 z" fill="#000" />
+                      
+                      {/* Random high fidelity fake bits */}
+                      <rect x="30" y="5" width="5" height="10" fill="#000" />
+                      <rect x="40" y="10" width="10" height="5" fill="#000" />
+                      <rect x="60" y="5" width="5" height="5" fill="#000" />
+                      <rect x="65" y="15" width="5" height="10" fill="#000" />
+                      <rect x="35" y="25" width="10" height="5" fill="#000" />
+                      <rect x="50" y="20" width="15" height="5" fill="#000" />
+                      
+                      <rect x="5" y="30" width="5" height="15" fill="#000" />
+                      <rect x="15" y="35" width="10" height="5" fill="#000" />
+                      <rect x="25" y="30" width="5" height="10" fill="#000" />
+                      <rect x="20" y="45" width="15" height="5" fill="#000" />
+                      
+                      <rect x="75" y="30" width="10" height="5" fill="#000" />
+                      <rect x="80" y="40" width="5" height="15" fill="#000" />
+                      <rect x="65" y="45" width="10" height="5" fill="#000" />
+                      
+                      <rect x="35" y="35" width="15" height="15" fill="#e2b921" /> {/* Gold Center Hub */}
+                      <rect x="40" y="40" width="5" height="5" fill="#000" />
+                      
+                      <rect x="5" y="55" width="15" height="5" fill="#000" />
+                      <rect x="10" y="65" width="5" height="10" fill="#000" />
+                      <rect x="25" y="60" width="5" height="5" fill="#000" />
+                      
+                      <rect x="30" y="55" width="10" height="5" fill="#000" />
+                      <rect x="45" y="60" width="5" height="10" fill="#000" />
+                      <rect x="50" y="55" width="15" height="5" fill="#000" />
+                      <rect x="60" y="65" width="5" height="10" fill="#000" />
+                      
+                      <rect x="75" y="55" width="5" height="15" fill="#000" />
+                      <rect x="85" y="60" width="10" height="5" fill="#000" />
+                      
+                      <rect x="30" y="75" width="5" height="10" fill="#000" />
+                      <rect x="40" y="80" width="15" height="5" fill="#000" />
+                      <rect x="45" y="85" width="5" height="10" fill="#000" />
+                      <rect x="60" y="75" width="10" height="5" fill="#000" />
+                      <rect x="65" y="85" width="10" height="5" fill="#000" />
+                      
+                      <rect x="75" y="80" width="15" height="5" fill="#000" />
+                      <rect x="80" y="85" width="5" height="10" fill="#000" />
+                    </svg>
+                  </div>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 8 }}>
+                    Scan with Google Authenticator app
+                  </span>
+                </div>
+
+                {/* Step 2: Copy setup secret key */}
+                <div style={{
+                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid var(--border-light)",
+                  borderRadius: 14,
+                  padding: 20
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--yellow)", marginBottom: 12 }}>
+                    STEP 2: OR MANUAL SETUP KEY
+                  </div>
+                  <p style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 8 }}>
+                    If you cannot scan the QR code, manually add this setup key to your app:
+                  </p>
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    background: "rgba(0,0,0,0.3)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    padding: "10px 14px"
+                  }}>
+                    <code style={{ fontSize: 15, fontFamily: "monospace", color: "var(--cyan)", letterSpacing: 1.5, flex: 1, fontWeight: 700 }}>
+                      {totpSecret}
+                    </code>
+                    <button
+                      onClick={handleCopySecret}
+                      type="button"
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: totpCopyFeedback ? "var(--green)" : "var(--yellow)",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        fontSize: 11,
+                        fontWeight: 700
+                      }}
+                    >
+                      {totpCopyFeedback ? <CheckCircle size={14} /> : <Copy size={14} />}
+                      {totpCopyFeedback ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: User Explanatory Guide & Verification Form */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                {/* Step-by-step documentation */}
+                <div style={{
+                  background: "rgba(10, 19, 44, 0.4)",
+                  border: "1px solid rgba(0, 240, 255, 0.15)",
+                  borderRadius: 14,
+                  padding: 20,
+                  fontSize: 12,
+                  lineHeight: 1.6,
+                  color: "var(--text-secondary)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, color: "#fff", fontSize: 13 }}>
+                    <Info size={16} color="var(--cyan)" /> Setup Instructions
+                  </div>
+                  
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ background: "rgba(255,255,255,0.02)", padding: 10, borderRadius: 8 }}>
+                      <strong style={{ color: "var(--yellow)", display: "block", marginBottom: 2 }}>1. Download App:</strong>
+                      <span>Download Google Authenticator App from Google Play Store or iOS App Store.</span>
+                    </div>
+
+                    <div style={{ background: "rgba(255,255,255,0.02)", padding: 10, borderRadius: 8 }}>
+                      <strong style={{ color: "var(--yellow)", display: "block", marginBottom: 2 }}>2. Add Setup Key:</strong>
+                      <span>Open Authenticator, tap the '+' icon, select 'Enter a setup key'. Account name: <code>CloudExchange</code>.</span>
+                    </div>
+
+                    <div style={{ background: "rgba(255,255,255,0.02)", padding: 10, borderRadius: 8 }}>
+                      <strong style={{ color: "var(--yellow)", display: "block", marginBottom: 2 }}>3. Keep Backup Safe:</strong>
+                      <span>Write down this secret key on paper. If you lose your phone, you need it to recover account access.</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form to submit verification */}
+                <form onSubmit={handleVerifyAndEnableTOTP} style={{
+                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid var(--border-light)",
+                  borderRadius: 14,
+                  padding: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 14
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--yellow)" }}>
+                    STEP 3: VERIFY 6-DIGIT CODE
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+                      Google Authenticator Code (6 Digits)
+                    </label>
+                    <input
+                      type="text"
+                      className="bn-input"
+                      maxLength={6}
+                      placeholder="e.g. 125983"
+                      value={totpInputCode}
+                      onChange={(e) => setTotpInputCode(e.target.value.replace(/\D/g, ""))}
+                      style={{ fontSize: 18, textAlign: "center", letterSpacing: 6, fontWeight: 700, height: 44 }}
+                      required
+                    />
+                    {totpError && (
+                      <span style={{ color: "var(--red)", fontSize: 12, marginTop: 4, display: "block" }}>
+                        {totpError}
+                      </span>
+                    )}
+                    <span style={{ display: "block", fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+                      ℹ Demo Codes: <code>125983</code>, <code>888888</code>, <code>000000</code> or any 6-digit number can be used for testing.
+                    </span>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn-green"
+                    style={{ height: 40, fontWeight: 700, fontSize: 13 }}
+                  >
+                    Verify &amp; Enable
+                  </button>
+                </form>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Google Authenticator Disable Modal */}
+      {showGoogle2faDisable && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(3, 7, 18, 0.9)",
+          backdropFilter: "blur(8px)",
+          zIndex: 9999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24
+        }}>
+          <div style={{
+            background: "#060913",
+            border: "1px solid var(--border)",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.8)",
+            borderRadius: 16,
+            maxWidth: 420,
+            width: "100%",
+            padding: 32,
+            position: "relative",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            textAlign: "center",
+            gap: 20
+          }}>
+            <button
+              onClick={() => setShowGoogle2faDisable(false)}
+              style={{
+                position: "absolute",
+                top: 16,
+                right: 16,
+                background: "none",
+                border: "none",
+                color: "var(--text-secondary)",
+                cursor: "pointer"
+              }}
+            >
+              <X size={18} />
+            </button>
+
+            <div style={{
+              background: "rgba(239, 68, 68, 0.1)",
+              borderRadius: "50%",
+              width: 56,
+              height: 56,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}>
+              <ShieldAlert size={28} color="var(--red)" />
+            </div>
+
+            <div>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>Google 2FA Deactivation</h3>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.5 }}>
+                Please enter the 6-digit code from your Google Authenticator app to confirm deactivation.
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyAndDisableTOTP} style={{ width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
+              <input
+                type="text"
+                className="bn-input"
+                maxLength={6}
+                placeholder="000000"
+                value={totpInputCode}
+                onChange={(e) => setTotpInputCode(e.target.value.replace(/\D/g, ""))}
+                style={{ fontSize: 18, textAlign: "center", letterSpacing: 6, fontWeight: 700, height: 44 }}
+                required
+              />
+              {totpError && (
+                <span style={{ color: "var(--red)", fontSize: 12, textAlign: "left", display: "block" }}>
+                  {totpError}
+                </span>
+              )}
+
+              <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowGoogle2faDisable(false)}
+                  className="btn-outline"
+                  style={{ flex: 1, height: 38 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-red"
+                  style={{ flex: 1, height: 38, background: "var(--red)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, cursor: "pointer" }}
+                >
+                  Confirm Disable
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <style jsx global>{`
         .grid-responsive-security {
           display: grid;
           grid-template-columns: 1fr 1fr;
+          gap: 32px;
+        }
+        .grid-responsive-2fa {
+          display: grid;
+          grid-template-columns: 1fr 1.1fr;
           gap: 32px;
         }
         @keyframes spin {
@@ -621,6 +1085,12 @@ export default function SecurityPage() {
         @media (max-width: 900px) {
           .grid-responsive-security {
             grid-template-columns: 1fr;
+          }
+        }
+        @media (max-width: 768px) {
+          .grid-responsive-2fa {
+            grid-template-columns: 1fr;
+            gap: 20px;
           }
         }
       `}</style>

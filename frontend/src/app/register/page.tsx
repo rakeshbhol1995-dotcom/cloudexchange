@@ -2,7 +2,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ShieldCheck, Cpu, Database, Eye, EyeOff, Sparkles, Smartphone, Mail } from "lucide-react";
+import { ShieldCheck, Cpu, Database, Eye, EyeOff, Sparkles, Smartphone, Mail, ArrowLeft } from "lucide-react";
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
 import { API_URL } from "../utils/api";
@@ -51,21 +51,16 @@ function RegisterForm() {
         body: JSON.stringify(payload)
       });
 
-      const data = await response.json();
+      // If OTP failed, show real error - no fallback bypass
       if (!response.ok) {
-        alert(data.error || "Failed to dispatch verification OTP.");
+        const data = await response.json();
+        alert(data.error || "Failed to send verification OTP. Please try again.");
         return;
       }
 
-      // If in sandbox mode, alert the generated code for easy demonstration
-      if (data.sandbox && data.code) {
-        alert(`[SANDBOX MOCK] A mock OTP has been generated for demo purposes: ${data.code}\n(Since no custom email/SMS credentials are active yet, use this code to proceed!)`);
-      }
-
       setStep("verify");
-    } catch (err) {
-      console.warn("Failed to dispatch OTP, using mock fallback: ", err);
-      setStep("verify");
+    } catch (err: any) {
+      alert("Network error. Please check your connection and try again.");
     }
   };
 
@@ -105,17 +100,18 @@ function RegisterForm() {
         throw new Error(data.error || "Registration failed");
       }
 
-      // Successful DB Registration!
+      // Successful Registration!
       localStorage.setItem("user_logged_in", "true");
       localStorage.setItem("username", email || phone);
       localStorage.setItem("user_id", data.userId);
       localStorage.setItem("kyc_tier", "Tier-1 Basic (Email Verified)");
+      // Save phone number for SMS OTP use on wallet page
+      if (phone) {
+        localStorage.setItem("user_phone", phone);
+      }
       window.location.href = "/trade";
     } catch (err: any) {
-      console.warn("Registration error, falling back to sandbox: ", err.message);
-      localStorage.setItem("user_logged_in", "true");
-      localStorage.setItem("username", email || phone || "new_trader@cloud.ex");
-      window.location.href = "/trade";
+      alert(err.message || "Registration failed. Please try again.");
     }
   };
 
@@ -137,12 +133,58 @@ function RegisterForm() {
         justifyContent: "space-between",
         zIndex: 10
       }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-          <CloudExchangeLogo size={28} />
-          <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>
-            Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
-          </span>
-        </Link>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {/* Circular Glassmorphic Back Button */}
+          <button 
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                window.history.back();
+              } else {
+                window.location.href = "/";
+              }
+            }}
+            title="Go Back"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              background: "rgba(255, 255, 255, 0.04)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+              outline: "none",
+              backdropFilter: "blur(12px)",
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+              e.currentTarget.style.borderColor = "var(--yellow)";
+              e.currentTarget.style.color = "var(--yellow)";
+              e.currentTarget.style.transform = "translateX(-3px)";
+              e.currentTarget.style.boxShadow = "0 0 15px rgba(245, 166, 35, 0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+              e.currentTarget.style.color = "var(--text-secondary)";
+              e.currentTarget.style.transform = "none";
+              e.currentTarget.style.boxShadow = "none";
+            }}
+          >
+            <ArrowLeft size={18} />
+          </button>
+
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+            <CloudExchangeLogo size={28} />
+            <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>
+              Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
+            </span>
+          </Link>
+        </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Already have an account?</span>
           <Link href="/login" style={{ border: "1px solid var(--border)", color: "var(--text-primary)", fontWeight: 600, fontSize: 13, padding: "8px 20px", borderRadius: 8, textDecoration: "none" }}>Log In</Link>

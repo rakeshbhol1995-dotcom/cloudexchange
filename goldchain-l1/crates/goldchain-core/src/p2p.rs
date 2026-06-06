@@ -1,11 +1,13 @@
 use crate::error::CoreError;
 use goldchain_crypto::keys::PublicKey;
 use goldchain_crypto::hash::Hash;
+use goldchain_types::Block;
 use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GossipMessage {
-    BlockProposal { height: u64, round: u32, block_hash: Hash },
+    BlockProposal { height: u64, round: u32, block: Block },
     Prevote { height: u64, round: u32, block_hash: Option<Hash>, validator: PublicKey },
     Precommit { height: u64, round: u32, block_hash: Option<Hash>, validator: PublicKey },
 }
@@ -90,6 +92,8 @@ impl P2PNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use goldchain_crypto::address::Address;
+    use goldchain_crypto::keys::PrivateKey;
 
     #[test]
     fn test_p2p_gossip_mesh_propagation() {
@@ -103,11 +107,19 @@ mod tests {
         node_b.connect_peer("127.0.0.1:8002".to_string());
         node_c.connect_peer("127.0.0.1:8001".to_string());
 
-        let block_hash = Hash::digest(b"p2p-block");
+        let dummy_block = Block::new(
+            1,
+            1000,
+            Hash([0u8; 32]),
+            Hash([0u8; 32]),
+            Address::from_public_key(&PrivateKey::generate().public_key()),
+            Vec::new(),
+        );
+
         let proposal = GossipMessage::BlockProposal {
             height: 1,
             round: 0,
-            block_hash,
+            block: dummy_block,
         };
 
         // 1. Node A initiates proposal broadcast

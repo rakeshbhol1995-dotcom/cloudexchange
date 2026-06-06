@@ -124,7 +124,7 @@ mod tests {
             crypto_suite: goldchain_crypto::signature::CryptoSuiteId::V1,
         };
 
-        let sig = Signature::sign(&priv_key, dummy_header.prev_hash.as_ref());
+        let sig = Signature::sign_hybrid_pq(&priv_key, dummy_header.prev_hash.as_ref());
         assert!(client.verify_header_with_committee(&dummy_header, &sig, &[pub_key]).is_ok());
 
         // Rotate committee
@@ -169,7 +169,7 @@ mod tests {
             crypto_suite: goldchain_crypto::signature::CryptoSuiteId::V1,
         };
 
-        let sig = Signature::sign(&priv_key1, dummy_header.prev_hash.as_ref());
+        let sig = Signature::sign_hybrid_pq(&priv_key1, dummy_header.prev_hash.as_ref());
 
         // 1. Quorum verification with 2/3 signers participating -> Should Pass (100 weight >= 100 threshold)
         assert!(client.verify_header_with_committee(&dummy_header, &sig, &[pub_key1, pub_key2]).is_ok());

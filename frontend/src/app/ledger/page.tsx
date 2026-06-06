@@ -5,6 +5,7 @@ import { LogOut, Activity, AlertTriangle, Play, ShieldAlert, Cpu, CheckCircle } 
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
 import Header from "../components/Header";
+import Footer from "../components/Footer";
 
 interface AuditLog { time: string; debit: string; credit: string; amount: number; coin: string; root: string; status: "VERIFIED" | "MATCHED"; }
 interface WashAlert { id: string; time: string; severity: "INFO" | "WARNING" | "CRITICAL"; msg: string; }
@@ -293,23 +294,7 @@ export default function LedgerAudit() {
       `}</style>
 
       {/* FOOTER */}
-      <footer style={{
-        background: "rgba(10, 17, 40, 0.75)",
-        backdropFilter: "blur(12px)",
-        borderTop: "1px solid var(--border)",
-        padding: "32px 0",
-        fontSize: 12,
-        color: "var(--text-secondary)",
-        marginTop: "auto"
-      }}>
-        <div className="container-xl" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span>© 2026 CloudExchange Group. Wash Trading Surveillance module active.</span>
-          <div style={{ display: "flex", gap: 16 }}>
-            <Link href="/" style={{ color: "var(--text-secondary)", textDecoration: "none" }}>Back to Home</Link>
-            <a href="#" style={{ color: "var(--text-secondary)", textDecoration: "none" }}>Risk Disclaimer</a>
-          </div>
-        </div>
-      </footer>
+      <Footer />
 
     </div>
   );

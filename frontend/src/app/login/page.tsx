@@ -9,6 +9,8 @@ import { API_URL } from "../utils/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email");
   const [step, setStep] = useState<"email" | "password" | "mfa" | "selfie_verification">("email");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
@@ -71,10 +73,8 @@ export default function LoginPage() {
             if (pendingLoginData) {
               applyLoginSession(pendingLoginData);
             } else {
-              // Sandbox quick login fallback
-              localStorage.setItem("user_logged_in", "true");
-              localStorage.setItem("username", email || "demo_institutional@cloud.ex");
-              window.location.href = "/trade";
+              setErrorMsg("No pending login session found. Please log in again.");
+              setStep("email");
             }
           }, 1500);
         }
@@ -85,9 +85,15 @@ export default function LoginPage() {
 
   const applyLoginSession = (data: any) => {
     localStorage.setItem("user_logged_in", "true");
-    localStorage.setItem("username", data.email || email);
+    localStorage.setItem("username", data.email || email || phone);
     localStorage.setItem("user_id", data.userId || "usr-fallback");
     localStorage.setItem("kyc_tier", data.kycStatus || "Tier-2 Verified (Biometrics Approved)");
+    localStorage.setItem("is_p2p_merchant", data.isMerchant ? "true" : "false");
+    if (data.merchantUpi) {
+      localStorage.setItem("merchant_upi_id", data.merchantUpi);
+    } else {
+      localStorage.removeItem("merchant_upi_id");
+    }
     if (data.balances) {
       localStorage.setItem("user_asset_balances", JSON.stringify(data.balances.map((b: any) => ({
         symbol: b.symbol,
@@ -104,11 +110,34 @@ export default function LoginPage() {
     e.preventDefault();
     setErrorMsg("");
     if (step === "email") {
-      if (!email.includes("@")) {
-        setErrorMsg("Please enter a valid email address.");
-        return;
+      if (loginMethod === "email") {
+        if (!email.includes("@")) {
+          setErrorMsg("Please enter a valid email address.");
+          return;
+        }
+        setStep("password");
+      } else {
+        if (phone.length < 8) {
+          setErrorMsg("Please enter a valid phone number.");
+          return;
+        }
+        
+        try {
+          const res = await fetch(`${API_URL}/security/send-sms-otp`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: phone, phoneNumber: phone })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setErrorMsg(data.error || "Failed to send SMS OTP.");
+            return;
+          }
+          setStep("mfa");
+        } catch (err: any) {
+          setErrorMsg("Failed to dispatch SMS OTP: " + err.message);
+        }
       }
-      setStep("password");
     } else if (step === "password") {
       if (password.length < 6) {
         setErrorMsg("Password must be at least 6 characters.");
@@ -117,15 +146,11 @@ export default function LoginPage() {
 
       // Proactively trigger email OTP dispatch upon password entry
       try {
-        const res = await fetch(`${API_URL}/security/send-email-otp`, {
+        await fetch(`${API_URL}/security/send-email-otp`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email })
         });
-        const data = await res.json();
-        if (data.sandbox && data.code) {
-          alert(`[SANDBOX MOCK] A secure login verification code was generated: ${data.code}\n(Use this code to complete the 2FA / MFA verification!)`);
-        }
       } catch (err) {
         console.warn("Failed to dispatch login OTP: ", err);
       }
@@ -142,35 +167,45 @@ export default function LoginPage() {
     }
     setErrorMsg("");
 
-    const isTotpMock = mfaCode === "125983" || mfaCode === "888888" || mfaCode === "000000";
+    const identifier = loginMethod === "phone" ? phone : email;
 
     try {
-      // If it's not a standard bypass mock code, verify the dynamic OTP against the backend API
-      if (!isTotpMock) {
-        const verifyRes = await fetch(`${API_URL}/security/verify-otp`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, emailCode: mfaCode })
-        });
-        const verifyData = await verifyRes.json();
-        if (!verifyRes.ok) {
-          setErrorMsg(verifyData.error || "Incorrect 2FA / OTP verification code.");
-          return;
-        }
+      const verifyPayload = loginMethod === "phone"
+        ? { email: phone, smsCode: mfaCode }
+        : { email, emailCode: mfaCode };
+
+      const verifyRes = await fetch(`${API_URL}/security/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(verifyPayload)
+      });
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok) {
+        setErrorMsg(verifyData.error || "Incorrect 2FA / OTP verification code.");
+        return;
       }
 
       const fingerprintObj = await generateDeviceFingerprint();
       const currentHash = fingerprintObj.hash;
 
       // Check if a different device has logged in or toggle is active
-      const storedHash = localStorage.getItem(`user_device_fingerprint_${email}`);
+      const storedHash = localStorage.getItem(`user_device_fingerprint_${identifier}`);
       const isNewDevice = simulateDifferentDevice || (storedHash && storedHash !== currentHash);
 
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
-      });
+      let response;
+      if (loginMethod === "phone") {
+        response = await fetch(`${API_URL}/auth/passwordless-login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phoneOrEmail: phone })
+        });
+      } else {
+        response = await fetch(`${API_URL}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+      }
 
       const data = await response.json();
       if (!response.ok) {
@@ -180,46 +215,82 @@ export default function LoginPage() {
       // If new device detected, store pending login session and require selfie liveness
       if (isNewDevice) {
         setPendingLoginData(data);
-        localStorage.setItem(`user_device_fingerprint_${email}`, currentHash);
+        localStorage.setItem(`user_device_fingerprint_${identifier}`, currentHash);
         setStep("selfie_verification");
         return;
       }
 
       // Save fingerprint if not already set
       if (!storedHash) {
-        localStorage.setItem(`user_device_fingerprint_${email}`, currentHash);
+        localStorage.setItem(`user_device_fingerprint_${identifier}`, currentHash);
       }
 
       // Normal path (Same device)
       applyLoginSession(data);
     } catch (err: any) {
-      console.warn("Database login offline, falling back to sandbox: ", err.message);
-      
+      setErrorMsg(err.message || "Authentication failed. Database or server offline.");
+    }
+  };
+
+  const handlePasskeyLogin = async () => {
+    setErrorMsg("");
+    const identifier = email || phone;
+    if (!identifier) {
+      setErrorMsg("Please enter your email or mobile number first to authenticate with Passkey.");
+      return;
+    }
+
+    try {
+      if (typeof window !== "undefined" && window.PublicKeyCredential) {
+        try {
+          const challenge = new Uint8Array(32);
+          window.crypto.getRandomValues(challenge);
+          
+          await navigator.credentials.get({
+            publicKey: {
+              challenge,
+              rpId: window.location.hostname,
+              userVerification: "required",
+              timeout: 10000
+            }
+          });
+        } catch (webauthnErr) {
+          console.warn("Native WebAuthn prompt error / cancel: ", webauthnErr);
+        }
+      }
+
+      const response = await fetch(`${API_URL}/auth/passwordless-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneOrEmail: identifier })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setErrorMsg(data.error || "Passkey login failed. Please register first.");
+        return;
+      }
+
       const fingerprintObj = await generateDeviceFingerprint();
       const currentHash = fingerprintObj.hash;
-      const storedHash = localStorage.getItem(`user_device_fingerprint_${email}`);
+      const storedHash = localStorage.getItem(`user_device_fingerprint_${identifier}`);
       const isNewDevice = simulateDifferentDevice || (storedHash && storedHash !== currentHash);
 
       if (isNewDevice) {
-        localStorage.setItem(`user_device_fingerprint_${email}`, currentHash);
+        setPendingLoginData(data);
+        localStorage.setItem(`user_device_fingerprint_${identifier}`, currentHash);
         setStep("selfie_verification");
         return;
       }
 
       if (!storedHash) {
-        localStorage.setItem(`user_device_fingerprint_${email}`, currentHash);
+        localStorage.setItem(`user_device_fingerprint_${identifier}`, currentHash);
       }
 
-      localStorage.setItem("user_logged_in", "true");
-      localStorage.setItem("username", email || "institutional_trader@cloud.ex");
-      window.location.href = "/trade";
+      applyLoginSession(data);
+    } catch (err: any) {
+      setErrorMsg("Passkey authentication failed: " + err.message);
     }
-  };
-
-  const handleQuickLogin = () => {
-    localStorage.setItem("user_logged_in", "true");
-    localStorage.setItem("username", "demo_institutional@cloud.ex");
-    window.location.href = "/trade";
   };
 
   return (
@@ -240,12 +311,58 @@ export default function LoginPage() {
         justifyContent: "space-between",
         zIndex: 10
       }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-          <CloudExchangeLogo size={28} />
-          <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>
-            Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
-          </span>
-        </Link>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {/* Circular Glassmorphic Back Button */}
+          <button 
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                window.history.back();
+              } else {
+                window.location.href = "/";
+              }
+            }}
+            title="Go Back"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              background: "rgba(255, 255, 255, 0.04)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+              outline: "none",
+              backdropFilter: "blur(12px)",
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+              e.currentTarget.style.borderColor = "var(--yellow)";
+              e.currentTarget.style.color = "var(--yellow)";
+              e.currentTarget.style.transform = "translateX(-3px)";
+              e.currentTarget.style.boxShadow = "0 0 15px rgba(245, 166, 35, 0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+              e.currentTarget.style.color = "var(--text-secondary)";
+              e.currentTarget.style.transform = "none";
+              e.currentTarget.style.boxShadow = "none";
+            }}
+          >
+            <ArrowLeft size={18} />
+          </button>
+
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+            <CloudExchangeLogo size={28} />
+            <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>
+              Cloud<span style={{ color: "var(--yellow)" }}>Exchange</span>
+            </span>
+          </Link>
+        </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Don&apos;t have an account?</span>
           <Link href="/register" style={{ background: "var(--yellow)", color: "#000", fontWeight: 700, fontSize: 13, padding: "8px 20px", borderRadius: 8, textDecoration: "none" }}>Sign Up</Link>
@@ -284,58 +401,70 @@ export default function LoginPage() {
 
             {step === "email" && (
               <form onSubmit={handleContinue} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 8, letterSpacing: 0.5 }}>EMAIL ADDRESS</label>
-                  <div style={{ position: "relative" }}>
-                    <Mail size={16} style={{ position: "absolute", left: 14, top: 15, color: "var(--text-secondary)" }} />
-                    <input
-                      type="email"
-                      className="bn-input"
-                      placeholder="Enter institutional or personal email"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      style={{ paddingLeft: 42 }}
-                      required
-                    />
+                {loginMethod === "email" ? (
+                  <div>
+                    <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 8, letterSpacing: 0.5 }}>EMAIL ADDRESS</label>
+                    <div style={{ position: "relative" }}>
+                      <Mail size={16} style={{ position: "absolute", left: 14, top: 15, color: "var(--text-secondary)" }} />
+                      <input
+                        type="email"
+                        className="bn-input"
+                        placeholder="Enter institutional or personal email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        style={{ paddingLeft: 42 }}
+                        required
+                      />
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div>
+                    <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 8, letterSpacing: 0.5 }}>MOBILE PHONE NUMBER</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <select className="bn-select" style={{ width: 90, height: 46, background: "rgba(13, 27, 56, 0.45)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-primary)", padding: "0 8px" }}>
+                        <option>+91 (IN)</option>
+                        <option>+1 (US)</option>
+                        <option>+44 (UK)</option>
+                        <option>+65 (SG)</option>
+                      </select>
+                      <div style={{ position: "relative", flex: 1 }}>
+                        <Smartphone size={16} style={{ position: "absolute", left: 14, top: 15, color: "var(--text-secondary)" }} />
+                        <input
+                          type="tel"
+                          className="bn-input"
+                          placeholder="Enter registered mobile number"
+                          value={phone}
+                          onChange={e => setPhone(e.target.value)}
+                          style={{ paddingLeft: 42 }}
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 <button type="submit" className="btn-yellow" style={{ width: "100%", padding: "14px", fontSize: 14, fontWeight: 700, borderRadius: 8 }}>
                   Continue
                 </button>
 
-                {/* Divider */}
-                <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "8px 0" }}>
-                  <div style={{ flex: 1, height: 1, background: "var(--border-light)" }} />
-                  <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Quick Access</span>
-                  <div style={{ flex: 1, height: 1, background: "var(--border-light)" }} />
-                </div>
-
-                {/* Quick Simulation Login (Crucial for validation testing) */}
-                <button type="button" onClick={handleQuickLogin} className="sso-btn" style={{
-                  background: "var(--cyan-dim)",
-                  border: "1px solid var(--cyan)",
-                  color: "var(--cyan)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  fontWeight: 600
-                }}>
-                  <Sparkles size={16} /> Bypass to Sandbox (Quick Demo)
-                </button>
-
                 {/* SSO Buttons */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-                  {[
-                    { icon: <Key size={16} />, label: "Continue with Passkey" },
-                    { icon: <Smartphone size={16} />, label: "Continue with Mobile / OTP" },
-                  ].map((sso) => (
-                    <button key={sso.label} type="button" className="sso-btn" style={{ fontSize: 13, gap: 8 }}>
-                      <span style={{ color: "var(--text-secondary)" }}>{sso.icon}</span>
-                      <span>{sso.label}</span>
+                  <button type="button" onClick={handlePasskeyLogin} className="sso-btn" style={{ fontSize: 13, gap: 8, width: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ color: "var(--text-secondary)" }}><Key size={16} /></span>
+                    <span>Continue with Passkey</span>
+                  </button>
+
+                  {loginMethod === "email" ? (
+                    <button type="button" onClick={() => { setLoginMethod("phone"); setErrorMsg(""); }} className="sso-btn" style={{ fontSize: 13, gap: 8, width: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ color: "var(--text-secondary)" }}><Smartphone size={16} /></span>
+                      <span>Continue with Mobile / OTP</span>
                     </button>
-                  ))}
+                  ) : (
+                    <button type="button" onClick={() => { setLoginMethod("email"); setErrorMsg(""); }} className="sso-btn" style={{ fontSize: 13, gap: 8, width: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ color: "var(--text-secondary)" }}><Mail size={16} /></span>
+                      <span>Continue with Email Address</span>
+                    </button>
+                  )}
                 </div>
               </form>
             )}
@@ -380,12 +509,20 @@ export default function LoginPage() {
             {step === "mfa" && (
               <form onSubmit={handleVerifyMfa} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={{ textAlign: "center", marginBottom: 8 }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>Biometric / TOTP Verification</div>
-                  <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>Enter the 6-digit verification code from your Google Authenticator app</p>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>
+                    {loginMethod === "phone" ? "Mobile OTP Verification" : "Biometric / TOTP Verification"}
+                  </div>
+                  <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    {loginMethod === "phone" 
+                      ? `Enter the 6-digit verification OTP sent to your phone ${phone}` 
+                      : "Enter the 6-digit verification code from your Google Authenticator app"}
+                  </p>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 8, textAlign: "center" }}>SECURITY TOTP CODE</label>
+                  <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, display: "block", marginBottom: 8, textAlign: "center" }}>
+                    {loginMethod === "phone" ? "SECURITY SMS OTP" : "SECURITY TOTP CODE"}
+                  </label>
                   <input
                     type="text"
                     maxLength={6}

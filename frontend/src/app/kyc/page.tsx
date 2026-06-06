@@ -28,6 +28,8 @@ import {
 import CloudExchangeLogo from "../components/CloudExchangeLogo";
 import SpaceBackground from "../components/SpaceBackground";
 import Header from "../components/Header";
+import Footer from "../components/Footer";
+import { API_URL } from "../utils/api";
 
 interface AssetBalance {
   symbol: string;
@@ -67,7 +69,7 @@ const COIN_DIRECTORY_LIST: CoinDirectoryItem[] = [
   { symbol: "ADA", name: "Cardano", price: 0.46, change24h: -2.30, volume24h: 350, color: "#0033AD" },
   { symbol: "SHIB", name: "Shiba Inu", price: 0.000022, change24h: 8.90, volume24h: 620, color: "#FFA143" },
   { symbol: "DOT", name: "Polkadot", price: 6.75, change24h: -1.15, volume24h: 180, color: "#E6007A" },
-  { symbol: "MATIC", name: "Polygon", price: 0.68, change24h: 1.55, volume24h: 210, color: "#8247E5" },
+  { symbol: "MATIC", name: "Polygon", price: 0.093, change24h: 1.55, volume24h: 210, color: "#8247E5" },
   { symbol: "SUI", name: "Sui Network", price: 1.15, change24h: 12.45, volume24h: 450, color: "#6FB1E4" },
   { symbol: "LINK", name: "Chainlink", price: 16.50, change24h: -0.40, volume24h: 310, color: "#375BD2" },
   { symbol: "LTC", name: "Litecoin", price: 78.40, change24h: 0.25, volume24h: 290, color: "#BFBBBB" },
@@ -89,7 +91,7 @@ const COIN_DIRECTORY_LIST: CoinDirectoryItem[] = [
   { symbol: "ARB", name: "Arbitrum", price: 0.95, change24h: -3.80, volume24h: 220, color: "#28A0F0" },
   { symbol: "IMX", name: "Immutable", price: 1.80, change24h: 1.65, volume24h: 115, color: "#0D0D0D" },
   { symbol: "STX", name: "Stacks", price: 1.95, change24h: -2.25, volume24h: 95, color: "#5546FF" },
-  { symbol: "RNDR", name: "Render Token", price: 7.80, change24h: 8.40, volume24h: 310, color: "#E02020" },
+  { symbol: "RNDR", name: "Render Token", price: 1.896, change24h: 8.40, volume24h: 310, color: "#E02020" },
   { symbol: "GALA", name: "Gala Games", price: 0.041, change24h: -4.10, volume24h: 160, color: "#0A0A0A" },
   { symbol: "FET", name: "Fetch.ai", price: 1.65, change24h: 6.80, volume24h: 290, color: "#00003C" },
   { symbol: "JUP", name: "Jupiter", price: 0.98, change24h: 3.12, volume24h: 185, color: "#1B3B36" },
@@ -139,6 +141,7 @@ export default function KycWalletHub() {
   const [emailCountdown, setEmailCountdown] = useState(0);
   const [smsCode, setSmsCode] = useState("");
   const [smsCountdown, setSmsCountdown] = useState(0);
+  const [withdrawPhone, setWithdrawPhone] = useState(typeof window !== "undefined" ? (localStorage.getItem("withdraw_phone") || "") : "");
   const [txHistory, setTxHistory] = useState<TxHistoryItem[]>([]);
   const [toastMessage, setToastMessage] = useState("");
   const [toastType, setToastType] = useState<"success" | "error">("success");
@@ -148,6 +151,7 @@ export default function KycWalletHub() {
   const [idType, setIdType] = useState("Passport");
   const [idNumber, setIdNumber] = useState("");
   const [uploadedFront, setUploadedFront] = useState(false);
+  const [frontImageBase64, setFrontImageBase64] = useState<string>("");
   
   // Selfie simulation states
   const [livenessStep, setLivenessStep] = useState<"none" | "position" | "blink" | "smile" | "analyzing" | "completed">("none");
@@ -156,6 +160,7 @@ export default function KycWalletHub() {
 
   // Coin price multiplier map to calculate approximate USD values in real time
   const [coinPriceMap, setCoinPriceMap] = useState<Record<string, number>>({
+    GOLD: 75.00,
     USDT: 1.00,
     BTC: 65050.00,
     ETH: 3450.00,
@@ -169,6 +174,21 @@ export default function KycWalletHub() {
     SUI: 1.15
   });
 
+  const fetchKycStatus = async () => {
+    const userId = localStorage.getItem("user_id");
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_URL}/auth/status/${userId}`);
+      const data = await res.json();
+      if (res.ok && data.success && data.user) {
+        setKycStatus(data.user.kycStatus);
+        localStorage.setItem("kyc_tier", data.user.kycStatus);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch kyc status:", err);
+    }
+  };
+
   // Sync state with localStorage
   useEffect(() => {
     const logged = localStorage.getItem("user_logged_in");
@@ -176,12 +196,15 @@ export default function KycWalletHub() {
     if (logged === "true") {
       setIsLoggedIn(true);
       setUserEmail(storedEmail || "institutional_trader@cloud.ex");
+      fetchUpdatedBalances();
+      fetchKycStatus();
     }
     const status = localStorage.getItem("kyc_tier") || "Tier-1 Basic (Email Verified)";
     setKycStatus(status);
 
     // Initial asset balances setup
     const defaultBalances: AssetBalance[] = [
+      { symbol: "GOLD", name: "GoldChain Native Coin", amount: 150.00, inOrder: 0.00, color: "#F5A623" },
       { symbol: "USDT", name: "Tether USD", amount: 15740.50, inOrder: 0.00, color: "#26A17B" },
       { symbol: "BTC", name: "Bitcoin", amount: 0.2450, inOrder: 0.00, color: "#F7931A" },
       { symbol: "ETH", name: "Ethereum", amount: 2.8500, inOrder: 0.00, color: "#627EEA" },
@@ -202,6 +225,12 @@ export default function KycWalletHub() {
     } else {
       loadedAssets = defaultBalances;
       localStorage.setItem("user_asset_balances", JSON.stringify(defaultBalances));
+    }
+
+    // Ensure GOLD is present in the loaded assets list
+    if (!loadedAssets.some(a => a.symbol === "GOLD")) {
+      loadedAssets.push({ symbol: "GOLD", name: "GoldChain Native Coin", amount: 150.00, inOrder: 0.00, color: "#F5A623" });
+      localStorage.setItem("user_asset_balances", JSON.stringify(loadedAssets));
     }
 
     // Sync USDT balance from global wallet_balance parameter
@@ -257,7 +286,12 @@ export default function KycWalletHub() {
         setCoinPriceMap(prev => {
           const updated = { ...prev };
           data.forEach((item: any) => {
-            const symWithoutUsdt = item.symbol.replace("USDT", "");
+            let symWithoutUsdt = item.symbol.replace("USDT", "");
+            if (item.symbol === "POLUSDT") {
+              symWithoutUsdt = "MATIC";
+            } else if (item.symbol === "RENDERUSDT") {
+              symWithoutUsdt = "RNDR";
+            }
             if (updated[symWithoutUsdt] !== undefined && symWithoutUsdt !== "USDT") {
               updated[symWithoutUsdt] = parseFloat(item.price);
             }
@@ -283,21 +317,134 @@ export default function KycWalletHub() {
     setWalletTotalUsd(total);
   }, [assets]);
 
-  // Generate simulated addresses when coin or network changes
+  const generateMockAddress = (coin: string, net: string) => {
+    const randomPart = Math.random().toString(36).substring(2, 10).toUpperCase();
+    if (coin === "USDT") {
+      if (net === "TRC20") setDepositAddress(`TY83h7d${randomPart}m39sJ9aW12`);
+      else if (net === "ERC20") setDepositAddress(`0x4f87A${randomPart}d69612a45fb2`);
+      else setDepositAddress(`SOL${randomPart}kP98h23gNs9`);
+    } else if (coin === "BTC") {
+      setDepositAddress(`1A1zP1eP5QGf${randomPart}87a912Gf`);
+    } else if (coin === "ETH") {
+      setDepositAddress(`0x71C56X${randomPart}274F3b98c3`);
+    } else {
+      setDepositAddress(`0x${coin}${randomPart}d921B436e2`);
+    }
+  };
+
+  const fetchDepositAddress = async (coin: string, net: string) => {
+    const userId = localStorage.getItem("user_id") || "usr-fallback";
+    try {
+      const res = await fetch(`${API_URL}/wallet/get-real-address`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, symbol: coin, network: net })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setDepositAddress(data.address);
+      } else {
+        generateMockAddress(coin, net);
+      }
+    } catch (err) {
+      generateMockAddress(coin, net);
+    }
+  };
+
+  async function fetchUpdatedBalances() {
+    const userId = localStorage.getItem("user_id");
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_URL}/balances/${userId}`);
+      const data = await res.json();
+      if (res.ok && data.success && data.balances) {
+        setAssets(prevAssets => {
+          const updated = prevAssets.map(asset => {
+            const matched = data.balances.find((b: any) => b.symbol === asset.symbol);
+            if (matched) {
+              return {
+                ...asset,
+                amount: parseFloat(matched.amount),
+                inOrder: parseFloat(matched.in_order)
+              };
+            }
+            return asset;
+          });
+          localStorage.setItem("user_asset_balances", JSON.stringify(updated));
+          const usdtVal = updated.find(a => a.symbol === "USDT")?.amount || 0;
+          localStorage.setItem("wallet_balance", String(usdtVal));
+          return updated;
+        });
+        window.dispatchEvent(new Event("storage"));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch updated balances:", err);
+    }
+  }
+
+  const mockDemoDeposit = () => {
+    const amt = activeModalCoin === "BTC" ? 0.05 : activeModalCoin === "ETH" ? 0.5 : activeModalCoin === "GOLD" ? 100 : 1000;
+    setAssets(prevAssets => {
+      const updated = prevAssets.map(a => {
+        if (a.symbol === activeModalCoin) {
+          return { ...a, amount: +(a.amount + amt).toFixed(6) };
+        }
+        return a;
+      });
+      localStorage.setItem("user_asset_balances", JSON.stringify(updated));
+      if (activeModalCoin === "USDT") {
+        localStorage.setItem("wallet_balance", String(updated.find(a => a.symbol === "USDT")?.amount || 0));
+      }
+      return updated;
+    });
+    // Add transaction to history
+    const newTx: TxHistoryItem = {
+      id: "TXN-" + Math.floor(10000 + Math.random() * 90000),
+      time: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      type: "Deposit",
+      coin: activeModalCoin,
+      amount: amt,
+      address: depositAddress,
+      status: "Completed"
+    };
+    setTxHistory(prevHistory => {
+      const nextHistory = [newTx, ...prevHistory];
+      localStorage.setItem("user_transaction_history", JSON.stringify(nextHistory));
+      return nextHistory;
+    });
+    window.dispatchEvent(new Event("storage"));
+  };
+
+  const handleSyncDeposits = async () => {
+    const userId = localStorage.getItem("user_id") || "usr-fallback";
+    triggerToast("Synchronizing with real blockchain ledger...");
+    try {
+      const res = await fetch(`${API_URL}/wallet/sync-real-deposits`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, symbol: activeModalCoin, network: selectedNetwork })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.transactions && data.transactions.length > 0) {
+          triggerToast(`Success! Credited ${data.transactions.length} new deposit(s).`);
+          fetchUpdatedBalances();
+        } else {
+          triggerToast("No new on-chain deposits found for this address.");
+        }
+      } else {
+        triggerToast(data.error || "Sync failed. Sandbox simulated credit added.", "error");
+        mockDemoDeposit();
+      }
+    } catch (err: any) {
+      triggerToast("Sync failed. Sandbox simulated credit added.", "error");
+      mockDemoDeposit();
+    }
+  };
+
   useEffect(() => {
     if (modalType === "deposit") {
-      const randomPart = Math.random().toString(36).substring(2, 10).toUpperCase();
-      if (activeModalCoin === "USDT") {
-        if (selectedNetwork === "TRC20") setDepositAddress(`TY83h7d${randomPart}m39sJ9aW12`);
-        else if (selectedNetwork === "ERC20") setDepositAddress(`0x4f87A${randomPart}d69612a45fb2`);
-        else setDepositAddress(`SOL${randomPart}kP98h23gNs9`);
-      } else if (activeModalCoin === "BTC") {
-        setDepositAddress(`1A1zP1eP5QGf${randomPart}87a912Gf`);
-      } else if (activeModalCoin === "ETH") {
-        setDepositAddress(`0x71C56X${randomPart}274F3b98c3`);
-      } else {
-        setDepositAddress(`0x${activeModalCoin}${randomPart}d921B436e2`);
-      }
+      fetchDepositAddress(activeModalCoin, selectedNetwork);
     }
   }, [modalType, activeModalCoin, selectedNetwork]);
 
@@ -345,14 +492,48 @@ export default function KycWalletHub() {
     setTimeout(() => setCopyFeedback(false), 2000);
   };
 
-  const handleSendEmailCode = () => {
+  const handleSendEmailCode = async () => {
     setEmailCountdown(60);
-    triggerToast("Email confirmation verification code sent to security inbox.");
+    triggerToast("Email confirmation verification code sending...");
+    try {
+      const res = await fetch(`${API_URL}/security/send-email-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        triggerToast("Verification OTP sent to your email.");
+      } else {
+        triggerToast(data.error || "Failed to send email OTP.", "error");
+      }
+    } catch (err: any) {
+      triggerToast("Failed to connect to email gateway.", "error");
+    }
   };
 
-  const handleSendSmsCode = () => {
+  const handleSendSmsCode = async () => {
+    if (!withdrawPhone) {
+      triggerToast("Please enter your phone number to request SMS OTP.", "error");
+      return;
+    }
     setSmsCountdown(60);
-    triggerToast("SMS OTP token dispatched to your registered mobile telephone number.");
+    triggerToast("SMS OTP token sending...");
+    try {
+      const res = await fetch(`${API_URL}/security/send-sms-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail, phoneNumber: withdrawPhone })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        triggerToast("Verification OTP sent to your phone via SMS.");
+      } else {
+        triggerToast(data.error || "Failed to send SMS OTP.", "error");
+      }
+    } catch (err: any) {
+      triggerToast("Failed to connect to SMS gateway.", "error");
+    }
   };
 
   const handleWithdrawalSubmit = (e: React.FormEvent) => {
@@ -379,53 +560,60 @@ export default function KycWalletHub() {
     setSmsCode("");
   };
 
-  // Complete Withdrawal transaction after security verification
-  const handleVerifyWithdrawal = () => {
+  const handleVerifyWithdrawal = async () => {
     if (authCode.length < 6 || emailCode.length < 6 || smsCode.length < 6) {
       triggerToast("Invalid authentication sequence. Please fill Google Authenticator, Email OTP, and SMS OTP codes.", "error");
       return;
     }
 
+    const userId = localStorage.getItem("user_id") || "usr-fallback";
     const amt = parseFloat(withdrawAmount);
-    const updatedAssets = assets.map(a => {
-      if (a.symbol === activeModalCoin) {
-        return { ...a, amount: +(a.amount - amt).toFixed(6) };
-      }
-      return a;
-    });
 
-    // Write back and sync
-    setAssets(updatedAssets);
-    localStorage.setItem("user_asset_balances", JSON.stringify(updatedAssets));
+    triggerToast("Executing withdrawal on blockchain ledger...");
 
-    // If USDT, sync global wallet balance for Trade component
-    if (activeModalCoin === "USDT") {
-      const usdtAsset = updatedAssets.find(a => a.symbol === "USDT");
-      if (usdtAsset) {
-        localStorage.setItem("wallet_balance", String(usdtAsset.amount));
-        window.dispatchEvent(new Event("storage"));
+    try {
+      const res = await fetch(`${API_URL}/wallet/withdraw`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          email: userEmail,
+          symbol: activeModalCoin,
+          amount: amt,
+          address: withdrawAddress,
+          network: selectedNetwork,
+          emailCode,
+          smsCode,
+          authCode
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        triggerToast(`Withdrawal of ${amt} ${activeModalCoin} completed successfully!`);
+        setModalType("none");
+        setShow2faOverlay(false);
+        // Refresh balances
+        fetchUpdatedBalances();
+        
+        // Add transaction to history
+        const newTx: TxHistoryItem = {
+          id: data.txid || ("TXN-" + Math.floor(10000 + Math.random() * 90000)),
+          time: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          type: "Withdrawal",
+          coin: activeModalCoin,
+          amount: amt,
+          address: withdrawAddress.slice(0, 8) + "..." + withdrawAddress.slice(-6),
+          status: "Completed"
+        };
+        const nextHistory = [newTx, ...txHistory];
+        setTxHistory(nextHistory);
+        localStorage.setItem("user_transaction_history", JSON.stringify(nextHistory));
+      } else {
+        triggerToast(data.error || "Withdrawal execution failed.", "error");
       }
+    } catch (err: any) {
+      triggerToast(`Withdrawal API connection failed: ${err.message}`, "error");
     }
-
-    // Add transaction to history list
-    const newTx: TxHistoryItem = {
-      id: "TXN-" + Math.floor(10000 + Math.random() * 90000),
-      time: new Date().toISOString().replace('T', ' ').slice(0, 19),
-      type: "Withdrawal",
-      coin: activeModalCoin,
-      amount: amt,
-      address: withdrawAddress.slice(0, 8) + "..." + withdrawAddress.slice(-6),
-      status: "Completed"
-    };
-    
-    const nextHistory = [newTx, ...txHistory];
-    setTxHistory(nextHistory);
-    localStorage.setItem("user_transaction_history", JSON.stringify(nextHistory));
-
-    // Reset modals and trigger success alert
-    setModalType("none");
-    setShow2faOverlay(false);
-    triggerToast(`Withdrawal of ${amt} ${activeModalCoin} completed. Processing ledger dispatch.`);
   };
 
   // KYC Submit trigger liveness
@@ -465,29 +653,78 @@ export default function KycWalletHub() {
       return () => clearTimeout(timer);
     } else if (livenessStep === "analyzing") {
       let currentVal = 0;
-      const progressIv = setInterval(() => {
+      const progressIv = setInterval(async () => {
         currentVal += 10;
         setProgressVal(currentVal);
         if (currentVal >= 100) {
           clearInterval(progressIv);
-          setLivenessStep("completed");
-          setKycStatus("Tier-2 Verified (Biometrics Approved)");
-          localStorage.setItem("kyc_tier", "Tier-2 Verified (Biometrics Approved)");
-          setBiometricLogs("BIOMETRIC PROFILE CORRESPONDS. IDENTITY TIER UPGRADED.");
+          
+          // Submit details to database
+          const userId = localStorage.getItem("user_id") || "usr-fallback";
+          try {
+            const res = await fetch(`${API_URL}/kyc/submit`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId,
+                country,
+                idType,
+                idNumber,
+                documentImage: frontImageBase64 || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" // default pixel fallback
+              })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              setLivenessStep("completed");
+              setKycStatus("Pending Verification");
+              localStorage.setItem("kyc_tier", "Pending Verification");
+              setBiometricLogs("BIOMETRIC PROFILE RECEIVED. COMPLIANCE AUDIT PENDING.");
+              triggerToast("KYC details submitted to PostgreSQL successfully!");
+            } else {
+              setLivenessStep("none");
+              triggerToast(data.error || "Failed to submit KYC details.", "error");
+            }
+          } catch (err: any) {
+            setLivenessStep("completed");
+            setKycStatus("Pending Verification");
+            localStorage.setItem("kyc_tier", "Pending Verification");
+            setBiometricLogs("BIOMETRIC PROFILE RECEIVED. SIMULATING COMPLIANCE AUDIT.");
+            triggerToast("KYC details submission simulated (Offline).");
+          }
         }
       }, 300);
       return () => clearInterval(progressIv);
     }
-  }, [livenessStep]);
+  }, [livenessStep, frontImageBase64, country, idType, idNumber]);
 
-  const handleResetKyc = () => {
-    localStorage.setItem("kyc_tier", "Tier-1 Basic (Email Verified)");
-    setKycStatus("Tier-1 Basic (Email Verified)");
-    setLivenessStep("none");
-    setIdNumber("");
-    setUploadedFront(false);
-    setProgressVal(0);
-    triggerToast("Sandbox identity tier reset to Tier-1.");
+  const handleResetKyc = async () => {
+    const userId = localStorage.getItem("user_id") || "usr-fallback";
+    try {
+      const res = await fetch(`${API_URL}/admin/users/update-kyc`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, kycStatus: "Tier-1 Basic (Email Verified)" })
+      });
+      if (res.ok) {
+        localStorage.setItem("kyc_tier", "Tier-1 Basic (Email Verified)");
+        setKycStatus("Tier-1 Basic (Email Verified)");
+        setLivenessStep("none");
+        setIdNumber("");
+        setUploadedFront(false);
+        setFrontImageBase64("");
+        setProgressVal(0);
+        triggerToast("KYC status reset to Tier-1 successfully.");
+      }
+    } catch (err) {
+      localStorage.setItem("kyc_tier", "Tier-1 Basic (Email Verified)");
+      setKycStatus("Tier-1 Basic (Email Verified)");
+      setLivenessStep("none");
+      setIdNumber("");
+      setUploadedFront(false);
+      setFrontImageBase64("");
+      setProgressVal(0);
+      triggerToast("KYC reset simulated.");
+    }
   };
 
   // Tech simulated QR code drawing block
@@ -730,16 +967,21 @@ export default function KycWalletHub() {
                                 width: 28,
                                 height: 28,
                                 borderRadius: "50%",
-                                background: asset.color,
+                                background: asset.symbol === "GOLD" ? "transparent" : asset.color,
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
                                 fontWeight: 800,
                                 fontSize: 11,
                                 color: "#fff",
-                                boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
+                                boxShadow: asset.symbol === "GOLD" ? "none" : "0 2px 8px rgba(0,0,0,0.3)",
+                                overflow: "hidden"
                               }}>
-                                {asset.symbol.slice(0, 2)}
+                                {asset.symbol === "GOLD" ? (
+                                  <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                ) : (
+                                  asset.symbol.slice(0, 2)
+                                )}
                               </div>
                               <div>
                                 <strong style={{ color: "var(--text-primary)", fontSize: 14 }}>{asset.symbol}</strong>
@@ -911,20 +1153,42 @@ export default function KycWalletHub() {
                   {/* Upload boxes */}
                   <div className="grid-responsive-2">
                     <div>
-                      <label style={{ fontSize: 10, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>FRONT SIDE SCAN</label>
+                      <label style={{ fontSize: 10, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>FRONT SIDE SCAN (PNG/JPG)</label>
                       <div
-                        style={{ border: "1px dashed var(--border)", borderRadius: 8, padding: "16px 8px", textAlign: "center", cursor: "pointer", background: "rgba(0,0,0,0.2)" }}
-                        onClick={() => setUploadedFront(true)}>
+                        style={{ border: "1px dashed var(--border)", borderRadius: 8, padding: "16px 8px", textAlign: "center", cursor: "pointer", background: "rgba(0,0,0,0.2)", position: "relative" }}
+                      >
+                        <input 
+                          type="file"
+                          accept="image/*"
+                          required
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setFrontImageBase64(reader.result as string);
+                                setUploadedFront(true);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
+                        />
                         <FileText size={20} style={{ color: "var(--text-secondary)", margin: "0 auto 6px" }} />
-                        <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>
-                          {uploadedFront ? "document_scanned_front.png" : "Click to select dummy"}
+                        <span style={{ fontSize: 10, color: "var(--text-secondary)", display: "block" }}>
+                          {uploadedFront ? "Document scan selected!" : "Upload real document photo"}
                         </span>
                       </div>
                     </div>
                     
                     <div>
                       <label style={{ fontSize: 10, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>BACK SIDE SCAN (OPTIONAL)</label>
-                      <div style={{ border: "1px dashed var(--border)", borderRadius: 8, padding: "16px 8px", textAlign: "center", cursor: "pointer", background: "rgba(0,0,0,0.2)" }}>
+                      <div style={{ border: "1px dashed var(--border)", borderRadius: 8, padding: "16px 8px", textAlign: "center", cursor: "pointer", background: "rgba(0,0,0,0.2)", position: "relative" }}>
+                        <input 
+                          type="file"
+                          accept="image/*"
+                          style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
+                        />
                         <FileText size={20} style={{ color: "var(--text-secondary)", margin: "0 auto 6px" }} />
                         <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>Select back scan</span>
                       </div>
@@ -1086,15 +1350,20 @@ export default function KycWalletHub() {
                   width: 24,
                   height: 24,
                   borderRadius: "50%",
-                  background: assets.find(a => a.symbol === activeModalCoin)?.color || "var(--yellow)",
+                  background: activeModalCoin === "GOLD" ? "transparent" : (assets.find(a => a.symbol === activeModalCoin)?.color || "var(--yellow)"),
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   fontSize: 9,
                   fontWeight: 900,
-                  color: "#fff"
+                  color: "#fff",
+                  overflow: "hidden"
                 }}>
-                  {activeModalCoin.slice(0, 2)}
+                  {activeModalCoin === "GOLD" ? (
+                    <img src="/gold_logo.png" alt="GOLD" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    activeModalCoin.slice(0, 2)
+                  )}
                 </div>
                 <h3 style={{ fontSize: 16, fontWeight: 800 }}>
                   {modalType === "deposit" ? `Deposit ${activeModalCoin} Crypto` : `Withdraw ${activeModalCoin} Assets`}
@@ -1200,6 +1469,26 @@ export default function KycWalletHub() {
                   </div>
                 </div>
 
+                <button
+                  onClick={handleSyncDeposits}
+                  className="btn-outline"
+                  style={{
+                    width: "100%",
+                    height: 38,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    border: "1px solid var(--cyan)",
+                    color: "var(--cyan)",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 700
+                  }}
+                >
+                  <RefreshCw size={14} /> Synchronize Live Deposits
+                </button>
+
                 {/* Instructions */}
                 <div style={{
                   background: "rgba(245, 166, 35, 0.05)",
@@ -1279,6 +1568,17 @@ export default function KycWalletHub() {
                           {smsCountdown > 0 ? `Resend (${smsCountdown}s)` : "Get Code"}
                         </button>
                       </div>
+                      <input 
+                        type="tel" 
+                        placeholder="Enter phone number (e.g. 919999999999)" 
+                        className="bn-input bn-input-sm" 
+                        value={withdrawPhone}
+                        onChange={e => {
+                          setWithdrawPhone(e.target.value);
+                          localStorage.setItem("withdraw_phone", e.target.value);
+                        }}
+                        style={{ marginBottom: 8 }}
+                      />
                       <div style={{ position: "relative" }}>
                         <Smartphone size={14} style={{ position: "absolute", left: 12, top: 12, color: "var(--text-muted)" }} />
                         <input 
@@ -1486,23 +1786,7 @@ export default function KycWalletHub() {
       `}</style>
 
       {/* FOOTER */}
-      <footer style={{
-        background: "rgba(10, 17, 40, 0.75)",
-        backdropFilter: "blur(12px)",
-        borderTop: "1px solid var(--border)",
-        padding: "24px 0",
-        fontSize: 12,
-        color: "var(--text-secondary)",
-        marginTop: "auto"
-      }}>
-        <div className="container-xl" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span>© 2026 CloudExchange Ledger & Assets. All rights reserved. Regulatory verified compliance desk.</span>
-          <div style={{ display: "flex", gap: 16 }}>
-            <Link href="/" style={{ color: "var(--text-secondary)", textDecoration: "none" }}>Back to Home</Link>
-            <a href="#" style={{ color: "var(--text-secondary)", textDecoration: "none" }}>Risk Disclaimer</a>
-          </div>
-        </div>
-      </footer>
+      <Footer />
 
     </div>
   );

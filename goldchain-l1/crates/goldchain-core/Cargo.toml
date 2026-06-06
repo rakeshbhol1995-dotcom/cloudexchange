@@ -11,3 +11,16 @@ serde_json = "1.0"
 borsh = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "1.0"
+goldchain-storage = { path = "../goldchain-storage" }
+goldchain-smt = { path = "../goldchain-smt" }
+tiny_http = { version = "0.12.0", features = ["ssl-rustls"] }
+wasmi = "0.31.2"
+hex = "0.4"
+ureq = "2.9"
+rcgen = "0.12"
+rustls = "0.23"
+
+[dev-dependencies]
+tempfile = "3.10"
+wat = "1.0"
+

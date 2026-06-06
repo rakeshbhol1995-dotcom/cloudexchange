@@ -1,0 +1,14 @@
+{
+  "name": "goldchain-cli",
+  "version": "1.0.0",
+  "description": "Custom Solana-like CLI Wallet for GoldChain L1 Blockchain",
+  "main": "cli.js",
+  "bin": {
+    "goldchain-cli": "./cli.js"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "ethers": "^6.11.1"
+  }
+}

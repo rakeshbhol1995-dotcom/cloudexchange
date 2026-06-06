@@ -6,6 +6,9 @@ pub enum CoreError {
     #[error("Crypto error: {0}")]
     CryptoError(#[from] CryptoError),
 
+    #[error("Storage error: {0}")]
+    StorageError(#[from] goldchain_storage::StorageError),
+
     #[error("Transaction signature verification failed")]
     InvalidSignature,
 

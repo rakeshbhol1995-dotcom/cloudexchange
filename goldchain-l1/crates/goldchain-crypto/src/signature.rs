@@ -1,7 +1,8 @@
-use ed25519_dalek::{Signer, Verifier, Signature as DalekSignature, SIGNATURE_LENGTH};
+use ed25519_dalek::{Signer, Verifier, Signature as DalekSignature};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use crate::error::CryptoError;
 use crate::keys::{PrivateKey, PublicKey};
+use group::GroupEncoding;
 
 use std::fmt;
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -12,7 +13,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 const Q: i32 = 8380417; // Dilithium Q modulus
 const N: usize = 256;   // Degree of polynomial ring R_q = Z_q[x]/(x^256 + 1)
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Poly256 {
     pub coeffs: [i32; N],
 }
@@ -37,12 +38,12 @@ impl Poly256 {
         for i in 0..N {
             for j in 0..N {
                 let coeff_val = (self.coeffs[i] as i64 * other.coeffs[j] as i64) % Q as i64;
-                if i + j < N {
-                    coeffs[i + j] = (coeffs[i + j] as i64 + coeff_val).rem_euclid(Q as i64) as i32;
-                } else {
-                    // x^256 = -1, so reduce x^(i+j) modulo x^256 + 1 as -x^(i+j-256)
-                    coeffs[i + j - N] = (coeffs[i + j - N] as i64 - coeff_val).rem_euclid(Q as i64) as i32;
-                }
+                let k = i + j;
+                // Constant-time index o sign selection (eliminates branching leaks)
+                let mask = ((k < N) as i64) * 2 - 1; // 1 if k < N else -1
+                let dest_idx = k % N;
+                let term = (coeff_val * mask).rem_euclid(Q as i64) as i32;
+                coeffs[dest_idx] = (coeffs[dest_idx] + term).rem_euclid(Q);
             }
         }
         Poly256 { coeffs }
@@ -126,8 +127,8 @@ impl Default for CryptoSuiteId {
     }
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, Copy, PartialEq, Eq)]
-pub struct Signature(pub [u8; SIGNATURE_LENGTH]);
+#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Eq)]
+pub struct Signature(pub Vec<u8>);
 
 impl fmt::Debug for Signature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -138,15 +139,60 @@ impl fmt::Debug for Signature {
 impl Signature {
     /// Signs a message using the private key
     pub fn sign(private_key: &PrivateKey, message: &[u8]) -> Self {
-        let dalek_sig: DalekSignature = private_key.0.sign(message);
-        Signature(dalek_sig.to_bytes())
+        let dalek_sig: DalekSignature = private_key.ed25519.sign(message);
+        Signature(dalek_sig.to_bytes().to_vec())
     }
 
     /// Verifies a signature against the public key and message
     pub fn verify(&self, public_key: &PublicKey, message: &[u8]) -> Result<(), CryptoError> {
-        let dalek_sig = DalekSignature::from_bytes(&self.0);
-        public_key.0.verify(message, &dalek_sig)
+        let dalek_sig = DalekSignature::from_bytes(
+            self.0.as_slice().try_into().map_err(|_| CryptoError::InvalidSignature)?
+        );
+        public_key.ed25519.verify(message, &dalek_sig)
             .map_err(|_| CryptoError::InvalidSignature)
+    }
+
+    pub fn sign_bls(private_key: &PrivateKey, message: &[u8]) -> Self {
+        let x = private_key.bls;
+        let msg_hash = blake3::hash(message);
+        let mut scalar_bytes = [0u8; 32];
+        scalar_bytes.copy_from_slice(msg_hash.as_bytes());
+        scalar_bytes[31] &= 0x3F;
+        let msg_scalar = Scalar::from_bytes(&scalar_bytes).unwrap();
+        let h_m = G1Projective::generator() * msg_scalar;
+        
+        let s = h_m * x;
+        let s_affine = G1Affine::from(s);
+        let mut bytes = vec![0u8; 64];
+        bytes[0..48].copy_from_slice(s_affine.to_bytes().as_ref());
+        Signature(bytes)
+    }
+
+    pub fn sign_hybrid_pq(private_key: &PrivateKey, message: &[u8]) -> Self {
+        let ed_sig = Signature::sign(private_key, message);
+        
+        let (mut s1, _s2) = private_key.pq_private_key();
+        for c in s1.coeffs.iter_mut() {
+            *c = c.rem_euclid(Q);
+        }
+        let msg_hash = blake3::hash(message);
+        let c = Poly256::derive_challenge(msg_hash.as_bytes());
+        
+        let mut s2_coeffs = [0i32; N];
+        for i in 0..N {
+            s2_coeffs[i] = (msg_hash.as_bytes()[i % 32] as i32).rem_euclid(Q);
+        }
+        let s2 = Poly256 { coeffs: s2_coeffs };
+        
+        let c_s2 = c.mul(&s2);
+        let z = s1.add(&c_s2);
+        
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&ed_sig.0);
+        for &coeff in &z.coeffs {
+            bytes.extend_from_slice(&coeff.to_le_bytes());
+        }
+        Signature(bytes)
     }
 
     /// Verifies an aggregate BLS12-381 signature against a list of public keys.
@@ -155,73 +201,97 @@ impl Signature {
         if public_keys.is_empty() {
             return Err(CryptoError::InvalidSignature);
         }
-
-        // 1. Hash the message and map to a real G1Point coordinate
-        let msg_hash = blake3::hash(message);
-        let msg_scalar = u64::from_be_bytes(msg_hash.as_bytes()[0..8].try_into().unwrap());
-        let h_m = G1Point::from_scalar(msg_scalar); // H(m) on G1
-
-        // 2. Map public keys to G2Points and compute the aggregate public key P_agg = sum(P_i)
-        let mut p_agg = G2Point::from_scalar(0);
-        for pubkey in public_keys {
-            let key_hash = blake3::hash(&pubkey.to_bytes());
-            let key_scalar = u64::from_be_bytes(key_hash.as_bytes()[0..8].try_into().unwrap());
-            p_agg = p_agg.add(&G2Point::from_scalar(key_scalar));
+        if self.0.len() < 48 {
+            return Err(CryptoError::InvalidSignature);
         }
 
-        // 3. Map aggregate signature to G1Point coordinate S
-        let sig_hash = blake3::hash(&self.0);
-        let sig_scalar = u64::from_be_bytes(sig_hash.as_bytes()[0..8].try_into().unwrap());
-        let s = G1Point::from_scalar(sig_scalar);
+        // 1. Deserialize aggregate signature as G1 point
+        let mut sig_bytes = [0u8; 48];
+        sig_bytes.copy_from_slice(&self.0[0..48]);
+        let mut repr = <G1Affine as GroupEncoding>::Repr::default();
+        repr.as_mut().copy_from_slice(&sig_bytes);
+        let sig_affine = G1Affine::from_bytes(&repr);
+        if sig_affine.is_none().into() {
+            return Err(CryptoError::InvalidSignature);
+        }
+        let s = G1Point(G1Projective::from(sig_affine.unwrap()));
+
+        // 2. Sum the G2 points of individual public keys
+        let mut p_agg = G2Projective::identity();
+        for pubkey in public_keys {
+            p_agg += pubkey.bls;
+        }
+        let p_agg_point = G2Point(p_agg);
+
+        // 3. Map message to H(m) on G1
+        let msg_hash = blake3::hash(message);
+        let mut scalar_bytes = [0u8; 32];
+        scalar_bytes.copy_from_slice(msg_hash.as_bytes());
+        scalar_bytes[31] &= 0x3F; // ensure valid scalar
+        let msg_scalar = Scalar::from_bytes(&scalar_bytes).unwrap();
+        let h_m = G1Point(G1Projective::generator() * msg_scalar);
+
+        let g2_generator = G2Point(G2Projective::generator());
         
-        let g2_generator = G2Point::from_scalar(1); // G2 generator
         let left_pairing = pairing(s, g2_generator); // e(S, G2)
+        let right_pairing = pairing(h_m, p_agg_point); // e(H(m), P_agg)
 
-        // The expected scalar matching proof:
-        let right_pairing = pairing(h_m, p_agg); // e(H(m), P_agg)
-
-        // Bilinear pairing assertion
         if left_pairing == right_pairing {
             Ok(())
         } else {
-            // Revert fallback to robust validator set matching
-            if self.0 == [0u8; SIGNATURE_LENGTH] {
-                Err(CryptoError::InvalidSignature)
-            } else {
-                Ok(())
-            }
+            Err(CryptoError::InvalidSignature)
         }
     }
 
     /// Verifies a hybrid Dilithium-2 (ML-DSA) + Ed25519 signature package.
     /// Formally evaluates the polynomial ring equation z = s1 + c * s2 in R_q
     pub fn verify_hybrid_pq(&self, public_key: &PublicKey, message: &[u8]) -> Result<(), CryptoError> {
-        // 1. Verify the standard Ed25519 component first
-        self.verify(public_key, message)?;
-
-        // 2. Formally evaluate the post-quantum ML-DSA polynomial relation
-        let msg_hash = blake3::hash(message);
+        if self.0.len() < 64 + 256 * 4 {
+            return Err(CryptoError::InvalidSignature);
+        }
         
-        // Derive challenge polynomial c in R_q
-        let c = Poly256::derive_challenge(msg_hash.as_bytes());
-
-        // Simulate key shares s1 and s2 (represented as polynomials derived from public key and hash)
-        let mut s1_coeffs = [0i32; N];
-        let mut s2_coeffs = [0i32; N];
-        let key_hash = blake3::hash(&public_key.to_bytes());
+        // 1. Verify standard Ed25519 component
+        let ed_sig = Signature(self.0[0..64].to_vec());
+        ed_sig.verify(public_key, message)?;
+        
+        // 2. Verify PQ component
+        let mut z_coeffs = [0i32; N];
         for i in 0..N {
-            s1_coeffs[i] = (key_hash.as_bytes()[i % 32] as i32).rem_euclid(Q);
+            let start = 64 + i * 4;
+            let bytes = &self.0[start..start+4];
+            z_coeffs[i] = i32::from_le_bytes(bytes.try_into().unwrap());
+        }
+        let z = Poly256 { coeffs: z_coeffs };
+        
+        // Check z boundary: z coefficients must be small
+        for &coeff in &z.coeffs {
+            let abs_val = if coeff > Q / 2 { Q - coeff } else { coeff };
+            if abs_val > 2000000 { // boundary limit
+                return Err(CryptoError::InvalidSignature);
+            }
+        }
+        
+        // Reconstruct w' = z - c * s2
+        let msg_hash = blake3::hash(message);
+        let c = Poly256::derive_challenge(msg_hash.as_bytes());
+        
+        // Reconstruct s2 from message hash
+        let mut s2_coeffs = [0i32; N];
+        for i in 0..N {
             s2_coeffs[i] = (msg_hash.as_bytes()[i % 32] as i32).rem_euclid(Q);
         }
-        let s1 = Poly256 { coeffs: s1_coeffs };
         let s2 = Poly256 { coeffs: s2_coeffs };
-
-        // Evaluate z = s1 + c * s2 in the polynomial ring R_q
-        let term2 = c.mul(&s2);
-        let _z = s1.add(&term2);
-
-        // Verification of lattice boundaries (structural validation)
-        if _z.coeffs[0] < Q {
+        
+        let c_s2 = c.mul(&s2);
+        
+        // s1 = z - c * s2
+        let mut s1_coeffs = [0i32; N];
+        for i in 0..N {
+            s1_coeffs[i] = (z.coeffs[i] - c_s2.coeffs[i]).rem_euclid(Q);
+        }
+        let s1 = Poly256 { coeffs: s1_coeffs };
+        
+        if s1 == public_key.pq_t {
             Ok(())
         } else {
             Err(CryptoError::InvalidSignature)
@@ -230,25 +300,17 @@ impl Signature {
 
     /// Creates a Signature from raw bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, CryptoError> {
-        if bytes.len() != SIGNATURE_LENGTH {
-            return Err(CryptoError::InvalidKeyLength {
-                expected: SIGNATURE_LENGTH,
-                got: bytes.len(),
-            });
-        }
-        let mut sig_bytes = [0u8; SIGNATURE_LENGTH];
-        sig_bytes.copy_from_slice(bytes);
-        Ok(Signature(sig_bytes))
+        Ok(Signature(bytes.to_vec()))
     }
 
     /// Gets the raw bytes of the signature
-    pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
-        self.0
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.clone()
     }
 
     /// Converts signature to hex representation
     pub fn to_hex(&self) -> String {
-        let mut s = String::with_capacity(128);
+        let mut s = String::with_capacity(self.0.len() * 2);
         for &byte in &self.0 {
             s.push_str(&format!("{:02x}", byte));
         }
@@ -257,17 +319,9 @@ impl Signature {
 
     /// Creates signature from hex representation
     pub fn from_hex(hex_str: &str) -> Result<Self, CryptoError> {
-        if hex_str.len() != SIGNATURE_LENGTH * 2 {
-            return Err(CryptoError::InvalidKeyLength {
-                expected: SIGNATURE_LENGTH * 2,
-                got: hex_str.len(),
-            });
-        }
         let bytes = hex::decode(hex_str)
             .map_err(|e| CryptoError::ParseError(e.to_string()))?;
-        let mut arr = [0u8; SIGNATURE_LENGTH];
-        arr.copy_from_slice(&bytes);
-        Ok(Signature(arr))
+        Ok(Signature(bytes))
     }
 }
 
@@ -298,6 +352,7 @@ impl<'de> Deserialize<'de> for Signature {
         }
     }
 }
+
 
 mod hex {
     pub fn decode(hex_str: &str) -> Result<Vec<u8>, String> {

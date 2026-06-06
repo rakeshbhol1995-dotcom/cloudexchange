@@ -1,12 +1,12 @@
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum StorageError {
     #[error("Database error: {0}")]
     DbError(String),
 
     #[error("Serialization/Deserialization error: {0}")]
-    BorshError(#[from] std::io::Error),
+    BorshError(String),
 
     #[error("Block not found: height {0}")]
     BlockNotFound(u64),
@@ -22,4 +22,10 @@ pub enum StorageError {
 
     #[error("Storage initialization error: {0}")]
     InitError(String),
+}
+
+impl From<std::io::Error> for StorageError {
+    fn from(error: std::io::Error) -> Self {
+        StorageError::BorshError(error.to_string())
+    }
 }

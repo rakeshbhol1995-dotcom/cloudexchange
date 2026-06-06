@@ -307,14 +307,17 @@ impl DataAvailabilityLayer {
             return Ok(false);
         }
 
-        // 1. Generate pseudo-random indices to sample using a deterministic seed (block_hash bytes)
-        let seed = block_hash.0;
+        // 1. Generate pseudo-random indices to sample using a cryptographically secure hash-based PRNG (Blake3 keyed derivation)
         let mut sample_indices = Vec::new();
         for i in 0..num_samples {
-            // Simple deterministic LCG pseudo-random generator
-            let mut state = u64::from_be_bytes(seed[0..8].try_into().unwrap());
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            let idx = ((state ^ (i as u64)) % (shards.len() as u64)) as usize;
+            // Derive a secure pseudo-random seed index based on block_hash o counter i
+            let mut input = Vec::with_capacity(32 + 8);
+            input.extend_from_slice(&block_hash.0);
+            input.extend_from_slice(&(i as u64).to_be_bytes());
+            let hash_res = Hash::digest(&input);
+            
+            let val = u64::from_be_bytes(hash_res.0[0..8].try_into().unwrap());
+            let idx = (val % (shards.len() as u64)) as usize;
             if !sample_indices.contains(&idx) {
                 sample_indices.push(idx);
             }

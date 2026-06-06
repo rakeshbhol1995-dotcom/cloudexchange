@@ -3,7 +3,7 @@
 # =========================================================================
 
 # Stage 1: Optimized Cargo Workspace Compilation
-FROM rust:1.75-slim AS builder
+FROM rust:1.88-slim AS builder
 WORKDIR /app
 
 # Install build dependencies
